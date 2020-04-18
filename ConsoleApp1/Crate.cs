@@ -5,7 +5,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
-using System.Xml;
+using System.Xml.Linq;
 
 namespace eq2crate
 {
@@ -81,15 +81,14 @@ namespace eq2crate
             _ = NewReq.Append(RunCrate.urlItemId);
             _ = NewReq.Append(GetIDNum.ToString());
             Task<string> rawXML = httpClient.GetStringAsync(NewReq.ToString());
-            XmlDocument BasicXML = new XmlDocument();
             rawXML.Wait();
             if (rawXML.IsFaulted)
             {
-                throw new HttpRequestException("There was a problem getting the info for the new item.");
+                throw rawXML.Exception;
             }
-            BasicXML.LoadXml(rawXML.Result);
-            XmlNode DocuNode = BasicXML.DocumentElement;
-            if (short.TryParse(DocuNode.Attributes["returned"].Value, out short ReturnedItems))
+            XDocument BasicXML = XDocument.Parse(rawXML.Result);
+            string returnedNum = BasicXML.Element("item_list").Attribute("returned").Value;
+            if (short.TryParse(returnedNum, out short ReturnedItems))
             {
                 if (ReturnedItems == 0)
                 {
@@ -99,7 +98,7 @@ namespace eq2crate
                 {
                     try
                     {
-                        ReturnVal = ProcessXML(DocuNode.FirstChild);
+                        ReturnVal = ProcessXML(BasicXML.Element("item_list").Element("item"));
                     }
                     catch (CrateException err)
                     {
@@ -107,7 +106,7 @@ namespace eq2crate
                         Console.WriteLine(err.Message);
                         if (err.severity > 1)
                         {
-                            throw;
+                            throw err;
                         }
                     }
                 }
@@ -125,28 +124,18 @@ namespace eq2crate
             ProcessedText.Replace("&quot;", "\"");
             return ProcessedText;
         }
-        internal CrateItem ProcessXML(XmlNode ItemListNode)
+        internal CrateItem ProcessXML(XElement ItemElement)
         {
-            XmlNode TypeInfoNode = null;
-            foreach (XmlNode ThisNode in ItemListNode.ChildNodes)
-            {
-                if (ThisNode.Name == "typeinfo")
-                {
-                    TypeInfoNode = ThisNode;
-                    break;
-                }
-            }
-            if (TypeInfoNode == null)
-                throw new CrateException("The item typeinfo could not be determined", 1);
+            XElement TypeInfoElement = ItemElement.Element("typeinfo");
             CrateItem ReturnVal;
-            if (short.TryParse(ItemListNode.Attributes["typeid"].Value, out short ItemType))
+            if (short.TryParse(ItemElement.Attribute("typeid").Value, out short ItemType))
             {
                 if (ItemType == 7)
                 {
-                    Dictionary<long, string> RecipeList = new Dictionary<long, string>();
-                    XmlNode RecipieNode = TypeInfoNode.FirstChild;
-                    foreach (XmlNode ThisNode in RecipieNode.ChildNodes)
-                        RecipeList[long.Parse(ThisNode.Attributes["id"].Value)] = ThisNode.Attributes["name"].Value;
+                    List<long> RecipeList = new List<long>();
+                    XElement RecipeElement = TypeInfoElement.Element("recipe_list");
+                    foreach (XElement xElement in RecipeElement.Elements("recipe"))
+                        RecipeList.Add(long.Parse(xElement.Attribute("id").Value));
                     ReturnVal = new RecipeBook
                     {
                         RecipieList = RecipeList
@@ -156,7 +145,7 @@ namespace eq2crate
                 {
                     ReturnVal = new SpellScroll
                     {
-                        SpellCRC = long.Parse(TypeInfoNode.Attributes["spellid"].Value)
+                        SpellCRC = long.Parse(TypeInfoElement.Attribute("spellid").Value)
                     };
                 }
                 else
@@ -168,39 +157,26 @@ namespace eq2crate
             {
                 throw new CrateException("The item type returned was not short!", 1);
             }
-            ReturnVal.ItemName = DeHtmlText(ItemListNode.Attributes["displayname"].Value);
-            // Dictionary<string, int> ClassDict = new Dictionary<string, int>();
-            XmlNode ClassList = null;
-            foreach (XmlNode MaybeClassNode in TypeInfoNode)
-            {
-                if (MaybeClassNode.Name == "classes")
-                {
-                    ClassList = MaybeClassNode;
-                    break;
-                }
-            }
-            if (ClassList == null)
-                throw new CrateException("The class list for this item could not be found!", 1);
+            ReturnVal.ItemName = DeHtmlText(ItemElement.Attribute("displayname").Value);
             Dictionary<string, int> ClassDict = new Dictionary<string, int>();
-            foreach (XmlNode ClassEntry in ClassList.ChildNodes)
+            foreach (XElement MaybeClassNode in TypeInfoElement.Element("classes").Elements())
             {
-                string ClassName = ClassEntry.Attributes["displayname"].Value;
-                int ClassVal = int.Parse(ClassEntry.Attributes["level"].Value);
-                ClassDict.Add(ClassName, ClassVal);
+                ClassDict[MaybeClassNode.Attribute("displayname").Value] = int.Parse(MaybeClassNode.
+                    Attribute("level").Value);
             }
             if (ClassDict.Count == 0)
                 throw new CrateException("No classes were found for this item!", 1);
             else
                 ReturnVal.ClassIDs = ClassDict;
-            if (long.TryParse(ItemListNode.Attributes["id"].Value, out long ItemIDNum))
+            if (long.TryParse(ItemElement.Attribute("id").Value, out long ItemIDNum))
                 ReturnVal.ItemIDNum = ItemIDNum;
             else
                 throw new CrateException("This item has no ID number!", 1);
-            if (short.TryParse(ItemListNode.Attributes["tierid"].Value, out short ItemTier))
+            if (short.TryParse(ItemElement.Attribute("tierid").Value, out short ItemTier))
                 ReturnVal.ItemTier = ItemTier;
             else
                 throw new CrateException("This item has no tier!", 1);
-            if (short.TryParse(ItemListNode.Attributes["itemlevel"].Value, out short ItemLevel))
+            if (short.TryParse(ItemElement.Attribute("itemlevel").Value, out short ItemLevel))
                 ReturnVal.ItemLevel = ItemLevel;
             else
                 ReturnVal.ItemLevel = 0;
@@ -212,42 +188,30 @@ namespace eq2crate
             new_req.Append(RunCrate.urlBase);
             new_req.Append(RunCrate.urlConstants);
             Task<string> raw_xml = httpClient.GetStringAsync(new_req.ToString());
-            XmlDocument xml_doc = new XmlDocument();
             raw_xml.Wait();
             if (raw_xml.IsFaulted)
             {
                 throw new HttpRequestException();
             }
-            xml_doc.LoadXml(raw_xml.Result);
-            XmlNode DocuNode = xml_doc.DocumentElement;
-            if (short.Parse(DocuNode.Attributes["returned"].Value) != 1)
+            XDocument xml_doc = XDocument.Parse(raw_xml.Result);
+            XElement DocuNode = xml_doc.Root;
+            if (short.Parse(DocuNode.Attribute("returned").Value) != 1)
                 throw new Exception("No constants returned!");
-            XmlNode consts_node = DocuNode.FirstChild;
-            if (short.TryParse(consts_node.Attributes["maxtradeskilllevel"].Value, out short new_ts_max))
+            XElement consts_node = DocuNode.Element("constants");
+            if (short.TryParse(consts_node.Attribute("maxtradeskilllevel").Value, out short new_ts_max))
                 max_ts_lvl = new_ts_max;
             else
                 throw new Exception("Unable to determine the max TS level.");
-            if (short.TryParse(consts_node.Attributes["maxadventurelevel"].Value, out short new_adv_max))
+            if (short.TryParse(consts_node.Attribute("maxadventurelevel").Value, out short new_adv_max))
                 max_adv_lvl = new_adv_max;
             else
                 throw new Exception("Unable to determine the max Adv level.");
-
         }
-        internal bool HasHeirloom(XmlNode object_zero)
+        internal bool HasHeirloom(XElement object_zero)
         {
-            bool returnVal = false;
-            foreach(XmlNode thisChild in object_zero.ChildNodes)
-            {
-                if (thisChild.Name == "heirloom")
-                {
-                    if (int.TryParse(thisChild.Attributes["value"].Value, out int heritage_value))
-                    {
-                        if (heritage_value == 1)
-                            returnVal = true;
-                    }
-                }
-            };
-            return returnVal;
+            int heirloomTrue = int.Parse(object_zero.Element("flags").
+                Element("heirloom").Attribute("value").Value);
+            return heirloomTrue == 1;
         }
         public CrateItem GetItemFromName(string search_key)
         {
@@ -258,12 +222,10 @@ namespace eq2crate
             search_url.Append(RunCrate.urlItemName);
             search_url.Append(search_key);
             Task<string> raw_xml = httpClient.GetStringAsync(search_url.ToString());
-            XmlDocument new_xml = new XmlDocument();
             raw_xml.Wait();
             if (raw_xml.IsFaulted)
                 throw raw_xml.Exception;
-            new_xml.LoadXml(raw_xml.Result);
-
+            XDocument new_xml = XDocument.Parse(raw_xml.Result);
             return return_val;
         }
     }
