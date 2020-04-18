@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29519.181
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "eq2crate", "ConsoleApp1\eq2crate.csproj", "{13F602B3-F673-4AB9-BFCF-7D2534E2204A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrateTests", "CrateTests\CrateTests.csproj", "{57FAB561-5B07-4AE3-B631-22EDA0B1788C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{13F602B3-F673-4AB9-BFCF-7D2534E2204A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{13F602B3-F673-4AB9-BFCF-7D2534E2204A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{13F602B3-F673-4AB9-BFCF-7D2534E2204A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{13F602B3-F673-4AB9-BFCF-7D2534E2204A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{57FAB561-5B07-4AE3-B631-22EDA0B1788C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{57FAB561-5B07-4AE3-B631-22EDA0B1788C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{57FAB561-5B07-4AE3-B631-22EDA0B1788C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{57FAB561-5B07-4AE3-B631-22EDA0B1788C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {777AD720-1D49-4CF8-A7EE-7594B3293D9E}
+	EndGlobalSection
+EndGlobal
