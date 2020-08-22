@@ -1,9 +1,7 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
-using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 
@@ -12,6 +10,12 @@ namespace eq2crate
     public class Crate : List<CrateItem>
     {
         internal readonly HttpClient httpClient = new HttpClient();
+        private const string urlBase = @"http://census.daybreakgames.com/s:ejep520/xml/get/eq2/";
+        private const string urlConstants = @"constants/";
+        private const string urlItemId = @"item/?c:limit=10&c:show=typeid,typeinfo,tierid,displayname,itemlevel,requiredskill,flags.heirloom&id=";
+        private const string urlItemName = @"item/?c:limit=10&c:show=typeid,typeinfo,tierid,displayname,itemlevel,requiredskill,flags.heirloom&displayname_lower=";
+        private const string urlSpell = @"spell/?c:show=crc,tier&id=";
+        private const string urlCharacter = @"character/?c:show=type,displayname,secondarytradeskills,skills.transmuting,spell_list&id=";
         public readonly Dictionary<string, short> adv_classes = new Dictionary<string, short>
             {
             ["Guardian"] = 3,
@@ -55,31 +59,32 @@ namespace eq2crate
         public short max_ts_lvl, max_adv_lvl;
         public Crate()
         {
-            GetMaxs();
+            string new_req = string.Concat(urlBase, urlConstants);
+            Task<string> raw_xml = httpClient.GetStringAsync(new_req.ToString());
+            raw_xml.Wait();
+            while (raw_xml.IsFaulted)
+            {
+                raw_xml = httpClient.GetStringAsync(new_req.ToString());
+                raw_xml.Wait();
+            }
+            XDocument xml_doc = XDocument.Parse(raw_xml.Result);
+            XElement DocuNode = xml_doc.Root;
+            if (short.Parse(DocuNode.Attribute("returned").Value) != 1)
+                throw new Exception("No constants returned!");
+            XElement consts_node = DocuNode.Element("constants");
+            if (short.TryParse(consts_node.Attribute("maxtradeskilllevel").Value, out short new_ts_max))
+                max_ts_lvl = new_ts_max;
+            else
+                throw new Exception("Unable to determine the max TS level.");
+            if (short.TryParse(consts_node.Attribute("maxadventurelevel").Value, out short new_adv_max))
+                max_adv_lvl = new_adv_max;
+            else
+                throw new Exception("Unable to determine the max Adv level.");
         }
-/*        public async void AddMultiple(List<long> IncomingItems)
-        {
-            ConcurrentQueue<CrateItem> MadeItems = new ConcurrentQueue<CrateItem>();
-            Task<CrateItem>[] AllTasks = new Task<CrateItem>[IncomingItems.Count];
-            for (int counter = 0; counter < IncomingItems.Count; counter++)
-            {
-                AllTasks[counter] = Task.Run(() => GetItemFromID(IncomingItems[counter]));
-            }
-            while (AllTasks.Length > 0)
-            {
-                var TaskResults = await Task.WhenAny(AllTasks);
-                if (TaskResults.Status == TaskStatus.RanToCompletion)
-                    MadeItems.Append(TaskResults.Result);
-            }
-            AddRange(MadeItems);
-        }*/
         public CrateItem GetItemFromID(long GetIDNum)
         {
             CrateItem ReturnVal = new CrateItem();
-            StringBuilder NewReq = new StringBuilder();
-            _ = NewReq.Append(RunCrate.urlBase);
-            _ = NewReq.Append(RunCrate.urlItemId);
-            _ = NewReq.Append(GetIDNum.ToString());
+            string NewReq = string.Concat(urlBase, urlItemId, GetIDNum.ToString());
             Task<string> rawXML = httpClient.GetStringAsync(NewReq.ToString());
             rawXML.Wait();
             if (rawXML.IsFaulted)
@@ -117,11 +122,15 @@ namespace eq2crate
             }
             return ReturnVal;
         }
-        internal string DeHtmlText(string RawText)
+        public static string DeHtmlText(string RawText)
         {
             string ProcessedText = RawText;
-            ProcessedText.Replace("&amp;", "&");
-            ProcessedText.Replace("&quot;", "\"");
+            ProcessedText = ProcessedText.Replace("&amp;", "&");
+            ProcessedText = ProcessedText.Replace("&quot;", "\"");
+            ProcessedText = ProcessedText.Replace(@"\/", "/");
+            ProcessedText = ProcessedText.Replace("&apos;", "'");
+            ProcessedText = ProcessedText.Replace("&lt;", "<");
+            ProcessedText = ProcessedText.Replace("&gt;", ">");
             return ProcessedText;
         }
         internal CrateItem ProcessXML(XElement ItemElement)
@@ -182,51 +191,143 @@ namespace eq2crate
                 ReturnVal.ItemLevel = 0;
             return ReturnVal;
         }
-        internal void GetMaxs()
+        public static bool HasHeirloom(XElement object_zero)
         {
-            StringBuilder new_req = new StringBuilder();
-            new_req.Append(RunCrate.urlBase);
-            new_req.Append(RunCrate.urlConstants);
-            Task<string> raw_xml = httpClient.GetStringAsync(new_req.ToString());
-            raw_xml.Wait();
-            if (raw_xml.IsFaulted)
+            if (!int.TryParse(object_zero.Element("flags").
+                Element("heirloom").Attribute("value").Value, out int heirloomTrue))
             {
-                throw new HttpRequestException();
+                throw new CrateException("Got something other than an item to find the heirloom value of.");
             }
-            XDocument xml_doc = XDocument.Parse(raw_xml.Result);
-            XElement DocuNode = xml_doc.Root;
-            if (short.Parse(DocuNode.Attribute("returned").Value) != 1)
-                throw new Exception("No constants returned!");
-            XElement consts_node = DocuNode.Element("constants");
-            if (short.TryParse(consts_node.Attribute("maxtradeskilllevel").Value, out short new_ts_max))
-                max_ts_lvl = new_ts_max;
-            else
-                throw new Exception("Unable to determine the max TS level.");
-            if (short.TryParse(consts_node.Attribute("maxadventurelevel").Value, out short new_adv_max))
-                max_adv_lvl = new_adv_max;
-            else
-                throw new Exception("Unable to determine the max Adv level.");
-        }
-        internal bool HasHeirloom(XElement object_zero)
-        {
-            int heirloomTrue = int.Parse(object_zero.Element("flags").
-                Element("heirloom").Attribute("value").Value);
             return heirloomTrue == 1;
         }
         public CrateItem GetItemFromName(string search_key)
         {
-            CrateItem return_val = new CrateItem();
-            search_key = search_key.ToLower();
-            StringBuilder search_url = new StringBuilder();
-            search_url.Append(RunCrate.urlBase);
-            search_url.Append(RunCrate.urlItemName);
-            search_url.Append(search_key);
-            Task<string> raw_xml = httpClient.GetStringAsync(search_url.ToString());
+            int errorCounter = 0;
+            CrateItem return_val;
+            string search_url = string.Concat(urlBase, urlItemName, search_key.ToLower());
+            Task<string> raw_xml = httpClient.GetStringAsync(search_url);
             raw_xml.Wait();
-            if (raw_xml.IsFaulted)
+            while (raw_xml.IsFaulted && (errorCounter < 3))
+            {
+                errorCounter++;
+                raw_xml = httpClient.GetStringAsync(search_url);
+                raw_xml.Wait();
+            }
+            if (errorCounter >= 3)
                 throw raw_xml.Exception;
             XDocument new_xml = XDocument.Parse(raw_xml.Result);
+            int returned_num = int.Parse(new_xml.Element("item_list").Attribute("Returned").Value);
+            switch (returned_num)
+            {
+                case 0:
+                    {
+                        throw new CrateException($"No items found with the name {search_key}");
+                    }
+                case 1:
+                    {
+                        return_val = ProcessXML(new_xml.Element("item_list").Element("item"));
+                        break;
+                    }
+                case 2:
+                    {
+                        XElement item_zero, item_one;
+                        item_zero = new_xml.Element("item_list").Elements("item").First();
+                        item_one = new_xml.Element("item_list").Elements("item").Last();
+                        if (HasHeirloom(item_zero) ^ HasHeirloom(item_one))
+                        {
+                            Console.Write("Is the item Heirloom flagged (y/N)?  ");
+                            if (Console.ReadLine().ToLower().StartsWith("y"))
+                            {
+                                if (HasHeirloom(item_zero))
+                                    return_val = ProcessXML(item_zero);
+                                else
+                                    return_val = ProcessXML(item_one);
+                            }
+                            else
+                            {
+                                if (HasHeirloom(item_zero))
+                                    return_val = ProcessXML(item_one);
+                                else
+                                    return_val = ProcessXML(item_zero);
+                            }
+                        }
+                        else if (HasLore(item_zero) ^ HasLore(item_one))
+                        {
+                            Console.Write("Is this item Lore flagged (y/N)?  ");
+                            if (Console.ReadLine().ToLower().StartsWith("y"))
+                            {
+                                if (HasLore(item_zero))
+                                    return_val = ProcessXML(item_zero);
+                                else
+                                    return_val = ProcessXML(item_one);
+                            }
+                            else
+                            {
+                                if (HasLore(item_zero))
+                                    return_val = ProcessXML(item_one);
+                                else
+                                    return_val = ProcessXML(item_zero);
+                            }
+                        }
+                        else if (HasDescription(item_zero) ^ HasDescription(item_one))
+                        {
+                            Console.Write("Does this item have a description (y/N)?  ");
+                            if (Console.ReadLine().ToLower().StartsWith("Y"))
+                            {
+                                if (HasDescription(item_zero))
+                                    return_val = ProcessXML(item_zero);
+                                else
+                                    return_val = ProcessXML(item_one);
+                            }
+                            else
+                            {
+                                if (HasDescription(item_zero))
+                                    return_val = ProcessXML(item_one);
+                                else
+                                    return_val = ProcessXML(item_zero);
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine("Two nearly identical items were found. This shouldn't happen!");
+                            throw new CrateException("Unable to distinguish two items.");
+                        }
+                        break;
+                    }
+                     /*     Test for hasHeirloom(item0)^hasHeriloom(item1).
+                     *         Ask if you mean heirloom or non heirloom.
+                     *     Test for hasDescription(item0)^hasDescription(item1).
+                     *         Ask if you mean the one with the description or not.
+                     */
+                default:
+                    {
+                        throw new CrateException($"Found {returned_num} items with the name {search_key}");
+                    }
+            }
             return return_val;
+        }
+        public static bool HasDescription(XElement object_zero)
+        {
+            XAttribute description = object_zero.Attribute("description");
+            bool return_value = false;
+            if (description == null)
+                return return_value;
+            try
+            {
+                return_value = !string.IsNullOrEmpty(description.Value);
+            }
+            catch (ArgumentNullException)
+            {
+                return_value = false;
+            }
+            return return_value;
+        }
+        public static bool HasLore(XElement object_zero)
+        {
+            if (!int.TryParse(object_zero.Element("flags").Element("lore").
+                Attribute("value").Value, out int is_lore))
+                throw new CrateException("Unable to get lore property.");
+            return is_lore == 1;
         }
     }
 }
