@@ -12,8 +12,8 @@ namespace eq2crate
         internal readonly HttpClient httpClient = new HttpClient();
         private const string urlBase = @"http://census.daybreakgames.com/s:ejep520/xml/get/eq2/";
         private const string urlConstants = @"constants/";
-        private const string urlItemId = @"item/?c:limit=10&c:show=typeid,typeinfo,tierid,displayname,itemlevel,requiredskill,flags.heirloom&id=";
-        private const string urlItemName = @"item/?c:limit=10&c:show=typeid,typeinfo,tierid,displayname,itemlevel,requiredskill,flags.heirloom&displayname_lower=";
+        private const string urlItemId = @"item/?c:limit=10&c:show=typeid,typeinfo,description,tierid,displayname,itemlevel,requiredskill,flags.heirloom,flags.lore&id=";
+        private const string urlItemName = @"item/?c:limit=10&c:show=typeid,typeinfo,description,tierid,displayname,itemlevel,requiredskill,flags.heirloom,flags.lore&displayname_lower=";
         private const string urlSpell = @"spell/?c:show=crc,tier&id=";
         private const string urlCharacter = @"character/?c:show=type,displayname,secondarytradeskills,skills.transmuting,spell_list&id=";
         public readonly Dictionary<string, short> adv_classes = new Dictionary<string, short>
@@ -189,6 +189,8 @@ namespace eq2crate
                 ReturnVal.ItemLevel = ItemLevel;
             else
                 ReturnVal.ItemLevel = 0;
+            ReturnVal.IsDescribed = HasDescription(ItemElement);
+            ReturnVal.IsLore = HasLore(ItemElement);
             return ReturnVal;
         }
         public static bool HasHeirloom(XElement object_zero)
@@ -216,7 +218,7 @@ namespace eq2crate
             if (errorCounter >= 3)
                 throw raw_xml.Exception;
             XDocument new_xml = XDocument.Parse(raw_xml.Result);
-            int returned_num = int.Parse(new_xml.Element("item_list").Attribute("Returned").Value);
+            int returned_num = int.Parse(new_xml.Element("item_list").Attribute("returned").Value);
             switch (returned_num)
             {
                 case 0:
@@ -309,9 +311,9 @@ namespace eq2crate
         public static bool HasDescription(XElement object_zero)
         {
             XAttribute description = object_zero.Attribute("description");
-            bool return_value = false;
+            bool return_value;
             if (description == null)
-                return return_value;
+                throw new Exception();
             try
             {
                 return_value = !string.IsNullOrEmpty(description.Value);
@@ -324,8 +326,7 @@ namespace eq2crate
         }
         public static bool HasLore(XElement object_zero)
         {
-            if (!int.TryParse(object_zero.Element("flags").Element("lore").
-                Attribute("value").Value, out int is_lore))
+            if (!int.TryParse(object_zero.Element("flags").Element("lore").Attribute("value").Value, out int is_lore))
                 throw new CrateException("Unable to get lore property.");
             return is_lore == 1;
         }
