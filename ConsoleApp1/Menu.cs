@@ -29,7 +29,6 @@ namespace eq2crate
         private string paddingZeros, paddingSpaces;
         private int MaxWide, MaxLong, TotalItems;
         private bool multipage;
-        private double paddings;
         public Menu()
         { }
         ~Menu()
@@ -201,11 +200,7 @@ namespace eq2crate
             {
                 int Midpoint = (MaxWide - Title.Length - 2) / 2;
                 int Endpoint = MaxWide - Midpoint - Title.Length - 1;
-                StringBuilder sb = new StringBuilder();
-                sb.Append(AsciiCorner.PadRight(Midpoint, '-'));
-                sb.Append(Title);
-                sb.Append(AsciiCorner.PadLeft(Endpoint, '-'));
-                Console.WriteLine(sb.ToString());
+                Console.WriteLine(string.Concat(AsciiCorner.PadRight(Midpoint, '-'), Title, AsciiCorner.PadLeft(Endpoint, '-')));
             }
         }
         internal int GetLongestStringLength(List<string> MenuItems)
@@ -276,19 +271,19 @@ namespace eq2crate
         }
         internal void FindSize()
         {
+            double paddings;
             MaxLong = Console.WindowHeight - 5; // (Top & bottom borders, top & bottom margins, and prompt)
             paddings = Math.Floor(Math.Log10(MaxLong)) + 1;
-            StringBuilder PaddingZeroBuilder = new StringBuilder();
-            StringBuilder PaddingSpaceBuilder = new StringBuilder();
+            string PaddingZeroBuilder = "", PaddingSpaceBuilder = "";
             for (int counter = 0; counter < paddings; counter++)
             {
-                _ = PaddingZeroBuilder.Append('0');
+                PaddingZeroBuilder = string.Concat(PaddingZeroBuilder, "0");
                 if (counter > 0)
-                    _ = PaddingSpaceBuilder.Append(' ');
+                    PaddingSpaceBuilder = string.Concat(PaddingSpaceBuilder, ' ');
 
             }
-            paddingZeros = PaddingZeroBuilder.ToString();
-            paddingSpaces = PaddingSpaceBuilder.ToString();
+            paddingZeros = PaddingZeroBuilder;
+            paddingSpaces = PaddingSpaceBuilder;
         }
     }
 }

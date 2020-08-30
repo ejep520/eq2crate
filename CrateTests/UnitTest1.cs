@@ -8,10 +8,10 @@ namespace eq2crate.CrateTests
     [TestClass]
     public class UnitTest1
     {
-        private readonly Crate TestBox = new Crate();
         [TestMethod]
         public void LoreTest()
         {
+            Crate TestBox = new Crate();
             TestBox.Clear();
             CrateItem TestItem = TestBox.GetItemFromID(1468337673);
             TestItem.ItemQuantity = 1;

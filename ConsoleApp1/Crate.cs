@@ -10,13 +10,12 @@ namespace eq2crate
     public class Crate : List<CrateItem>
     {
         internal readonly HttpClient httpClient = new HttpClient();
-        private const string urlBase = @"http://census.daybreakgames.com/s:ejep520/xml/get/eq2/";
+        private readonly string urlBase = RunCrate.urlBase;
         private const string urlConstants = @"constants/";
         private const string urlItemId = @"item/?c:limit=10&c:show=typeid,typeinfo,description,tierid,displayname,itemlevel,requiredskill,flags.heirloom,flags.lore&id=";
         private const string urlItemName = @"item/?c:limit=10&c:show=typeid,typeinfo,description,tierid,displayname,itemlevel,requiredskill,flags.heirloom,flags.lore&displayname_lower=";
         private const string urlSpell = @"spell/?c:show=crc,tier&id=";
-        private const string urlCharacter = @"character/?c:show=type,displayname,secondarytradeskills,skills.transmuting,spell_list&id=";
-        public readonly Dictionary<string, short> adv_classes = new Dictionary<string, short>
+        public static readonly Dictionary<string, short> adv_classes = new Dictionary<string, short>
             {
             ["Guardian"] = 3,
             ["Berserker"] = 4,
@@ -45,7 +44,7 @@ namespace eq2crate
             ["Beastlord"] = 42,
             ["Channeler"] = 44
             };
-        public readonly Dictionary<string, short> ts_classes = new Dictionary<string, short>
+        public static readonly Dictionary<string, short> ts_classes = new Dictionary<string, short>
         {
             ["woodworker"] = 2,
             ["carpenter"] = 3,
@@ -313,14 +312,19 @@ namespace eq2crate
             XAttribute description = object_zero.Attribute("description");
             bool return_value;
             if (description == null)
-                throw new Exception();
-            try
-            {
-                return_value = !string.IsNullOrEmpty(description.Value);
-            }
-            catch (ArgumentNullException)
             {
                 return_value = false;
+            }
+            else
+            {
+                try
+                {
+                    return_value = !string.IsNullOrEmpty(description.Value);
+                }
+                catch (ArgumentNullException)
+                {
+                    return_value = false;
+                }
             }
             return return_value;
         }
