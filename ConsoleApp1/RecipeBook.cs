@@ -7,6 +7,9 @@ namespace eq2crate
     {
         public new const short ItemType = 7;
         public List<long> RecipieList = new List<long>();
+        /// <summary>
+        /// This is a do-nothing constructor. Just don't use it. Please.
+        /// </summary>
         public RecipeBook()
         { }
         public override string ToString()

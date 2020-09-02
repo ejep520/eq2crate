@@ -8,7 +8,7 @@ namespace eq2crate
         public long ItemIDNum;
         public short ItemLevel, ItemQuantity, ItemTier, ItemType;
         public string ItemName;
-        public bool IsLore, IsNoTransmute, IsDescribed;
+        public bool IsLore, IsNoTransmute, IsDescribed, IsHeirloom;
         public Dictionary<string, int> ClassIDs = new Dictionary<string, int>();
         public CrateItem()
         {
