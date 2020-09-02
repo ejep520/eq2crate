@@ -23,13 +23,7 @@ namespace eq2crate
             foreach (KeyValuePair<string, int> pair in ClassIDs)
                 out_classes.Append($"  {pair.Key}: {pair.Value}\n");
             string out_tier = $"Tier: {ItemTier}";
-            StringBuilder returnVal = new StringBuilder();
-            returnVal.Append(out_name);
-            returnVal.Append(out_type);
-            returnVal.Append(out_crc);
-            returnVal.Append(out_classes.ToString());
-            returnVal.Append(out_tier);
-            return returnVal.ToString();
+            return string.Concat(out_name, out_type, out_crc, out_classes.ToString(), out_tier);
         }
     }
 }

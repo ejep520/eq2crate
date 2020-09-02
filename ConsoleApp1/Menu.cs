@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace eq2crate
 {
@@ -30,21 +28,26 @@ namespace eq2crate
         private const string DefaultMenuItem = "{0}. {1}";
         private string paddingZeros, paddingSpaces;
         private int MaxWide, MaxLong, TotalItems;
+        private bool multipage;
         public Menu()
+        { }
+        ~Menu()
         { }
         public int ThisMenu(List<string> MenuItems, bool ReturnResponse, string Title=null)
         {
-            int pagesNeeded;
-            string Footer = string.Empty;
+            bool EndMenu = false;
+            int CurrentPage = 0, UserInt = -1, pagesNeeded;
+            string Footer = string.Empty, UserInput;
             List<string>[] Pages;
-            bool multipage = false;
-            MaxLong = Console.WindowHeight - 5; // (Top & bottom borders, top & bottom margins, and prompt)
+            FindSize();
             if (ReturnResponse)
                 MenuItems.Insert(0, "Cancel");
             else
                 Footer = DefaultFooter;
             if (MenuItems.Count > MaxLong)
                 multipage = true;
+            else
+                multipage = false;
             if (multipage)
             {
                 int ItemsPerPage = MaxLong - 2;
@@ -58,18 +61,6 @@ namespace eq2crate
                         MenuItems.InsertRange(counter * ItemsPerPage, OtherPageDirs);
                 }
             }
-            double paddings = Math.Floor(Math.Log10(MaxLong)) + 1;
-            StringBuilder PaddingZeroBuilder = new StringBuilder();
-            StringBuilder PaddingSpaceBuilder = new StringBuilder();
-            for (int counter = 0; counter < paddings; counter++)
-            {
-                _ = PaddingZeroBuilder.Append('0');
-                if (counter > 0)
-                    _ = PaddingSpaceBuilder.Append(' ');
-
-            }
-            paddingZeros = PaddingZeroBuilder.ToString();
-            paddingSpaces = PaddingSpaceBuilder.ToString();
             for (int counter = 0; counter < MenuItems.Count; counter++)
             {
                 int ThisPos = (counter % MaxLong) + 1;
@@ -108,11 +99,6 @@ namespace eq2crate
                     Pages[counter / MaxLong] = new List<string>();
                 Pages[counter / MaxLong].Add(MenuItems[counter]);
             }
-            bool EndMenu = false;
-            int CurrentPage = 0;
-            string UserInput;
-            int UserInt = -1;
-            char UserChar;
             do
             {
                 Console.Clear();
@@ -143,7 +129,7 @@ namespace eq2crate
                     }
                     EndMenu = true;
                 }
-                else if (multipage && char.TryParse(UserInput, out UserChar))
+                else if (multipage && char.TryParse(UserInput, out char UserChar))
                 {
                     if ((UserChar == NextChar) && (CurrentPage < (pagesNeeded - 1)))
                         CurrentPage++;
@@ -159,7 +145,7 @@ namespace eq2crate
                         continue;
                 }
                 else if (char.TryParse(UserInput, out _))
-                    EndMenu = true;
+                    continue;
                 else if (multipage && (UserInput == NextNext))
                 {
                     if ((CurrentPage + FastFast) <= (pagesNeeded - 1))
@@ -188,7 +174,7 @@ namespace eq2crate
                     else
                         CurrentPage = 0;
                 }
-            }while (!EndMenu);
+            } while (!EndMenu);
             return UserInt;
         }
         internal void PrintCurrentPage(List<string> CurrentPage)
@@ -214,11 +200,7 @@ namespace eq2crate
             {
                 int Midpoint = (MaxWide - Title.Length - 2) / 2;
                 int Endpoint = MaxWide - Midpoint - Title.Length - 1;
-                StringBuilder sb = new StringBuilder();
-                sb.Append(AsciiCorner.PadRight(Midpoint, '-'));
-                sb.Append(Title);
-                sb.Append(AsciiCorner.PadLeft(Endpoint, '-'));
-                Console.WriteLine(sb.ToString());
+                Console.WriteLine(string.Concat(AsciiCorner.PadRight(Midpoint, '-'), Title, AsciiCorner.PadLeft(Endpoint, '-')));
             }
         }
         internal int GetLongestStringLength(List<string> MenuItems)
@@ -234,19 +216,21 @@ namespace eq2crate
             List<int> Overlongs = new List<int>();
             for (int counter = 0; counter < MenuItems.Count; counter++)
             {
-                if (MenuItems[counter].Length >= MyWide)
+                if (MenuItems[counter].Length > MyWide)
                     Overlongs.Add(counter);
             }
             if (Overlongs.Count == 0)
                 return MenuItems;
             for (int counter = Overlongs.Count - 1; counter >= 0; counter--)
             {
-                int WordCounter = 0;
-                int LengthRemaining;
-                int LinesNeeded = (MenuItems[Overlongs[counter]].Length / MaxWide) + 1;
+                int WordCounter = 0, LinesNeeded = (MenuItems[Overlongs[counter]].Length / MaxWide) + 1,
+                    LengthRemaining;
+                if (LinesNeeded < 2)
+                    LinesNeeded = 2;
                 StringBuilder NewMenuItem = new StringBuilder();
                 string[] MenuItemBreakup = MenuItems[Overlongs[counter]].Split(' ');
-                for (int InnerCounter = 0; InnerCounter < LinesNeeded; InnerCounter++)
+                int InnerCounter;
+                for (InnerCounter = 0; InnerCounter < LinesNeeded; InnerCounter++)
                 {
                     LengthRemaining = MyWide;
                     if (InnerCounter > 0)
@@ -284,6 +268,22 @@ namespace eq2crate
                 MenuItems[Overlongs[counter]] = NewMenuItem.ToString();
             }
             return MenuItems;
+        }
+        internal void FindSize()
+        {
+            double paddings;
+            MaxLong = Console.WindowHeight - 5; // (Top & bottom borders, top & bottom margins, and prompt)
+            paddings = Math.Floor(Math.Log10(MaxLong)) + 1;
+            string PaddingZeroBuilder = "", PaddingSpaceBuilder = "";
+            for (int counter = 0; counter < paddings; counter++)
+            {
+                PaddingZeroBuilder = string.Concat(PaddingZeroBuilder, "0");
+                if (counter > 0)
+                    PaddingSpaceBuilder = string.Concat(PaddingSpaceBuilder, ' ');
+
+            }
+            paddingZeros = PaddingZeroBuilder;
+            paddingSpaces = PaddingSpaceBuilder;
         }
     }
 }
