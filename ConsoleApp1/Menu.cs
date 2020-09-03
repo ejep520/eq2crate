@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace eq2crate
 {
@@ -25,29 +27,33 @@ namespace eq2crate
         private readonly string[] FirstPageDirs = { LastPage, NextPage };
         private readonly string[] LastPageDirs = { PrevPage, FirstPage };
         private readonly string[] OtherPageDirs = { PrevPage, NextPage };
+        private readonly List<string> ModdedMenu = new List<string>();
         private const string DefaultMenuItem = "{0}. {1}";
         private string paddingZeros, paddingSpaces;
         private int MaxWide, MaxLong, TotalItems;
-        private bool multipage;
         public Menu()
-        { }
-        ~Menu()
         { }
         public int ThisMenu(List<string> MenuItems, bool ReturnResponse, string Title=null)
         {
-            bool EndMenu = false;
-            int CurrentPage = 0, UserInt = -1, pagesNeeded;
-            string Footer = string.Empty, UserInput;
+            int pagesNeeded;
+            string Footer = string.Empty;
             List<string>[] Pages;
-            FindSize();
+<<<<<<< Updated upstream
+            bool multipage = false;
+            MaxLong = Console.WindowHeight - 5; // (Top & bottom borders, top & bottom margins, and prompt)
+=======
+            FindSize(MenuItems, Title);
+>>>>>>> Stashed changes
             if (ReturnResponse)
                 MenuItems.Insert(0, "Cancel");
             else
                 Footer = DefaultFooter;
+<<<<<<< Updated upstream
             if (MenuItems.Count > MaxLong)
                 multipage = true;
-            else
-                multipage = false;
+=======
+            multipage = MenuItems.Count > MaxLong;
+>>>>>>> Stashed changes
             if (multipage)
             {
                 int ItemsPerPage = MaxLong - 2;
@@ -61,6 +67,18 @@ namespace eq2crate
                         MenuItems.InsertRange(counter * ItemsPerPage, OtherPageDirs);
                 }
             }
+            double paddings = Math.Floor(Math.Log10(MaxLong)) + 1;
+            StringBuilder PaddingZeroBuilder = new StringBuilder();
+            StringBuilder PaddingSpaceBuilder = new StringBuilder();
+            for (int counter = 0; counter < paddings; counter++)
+            {
+                _ = PaddingZeroBuilder.Append('0');
+                if (counter > 0)
+                    _ = PaddingSpaceBuilder.Append(' ');
+
+            }
+            paddingZeros = PaddingZeroBuilder.ToString();
+            paddingSpaces = PaddingSpaceBuilder.ToString();
             for (int counter = 0; counter < MenuItems.Count; counter++)
             {
                 int ThisPos = (counter % MaxLong) + 1;
@@ -87,9 +105,6 @@ namespace eq2crate
                 else
                     MenuItems[counter] = $"xx. {MenuItems[counter]}";
             }
-            MaxWide = GetLongestStringLength(MenuItems);
-            if (MaxWide >= Console.WindowWidth)
-                MaxWide = Console.WindowWidth - 4;
             MenuItems = FixOverlong(MenuItems);
             pagesNeeded = (MenuItems.Count() / MaxLong) + 1;
             Pages = new List<string>[pagesNeeded];
@@ -99,6 +114,11 @@ namespace eq2crate
                     Pages[counter / MaxLong] = new List<string>();
                 Pages[counter / MaxLong].Add(MenuItems[counter]);
             }
+            bool EndMenu = false;
+            int CurrentPage = 0;
+            string UserInput;
+            int UserInt = -1;
+            char UserChar;
             do
             {
                 Console.Clear();
@@ -129,7 +149,7 @@ namespace eq2crate
                     }
                     EndMenu = true;
                 }
-                else if (multipage && char.TryParse(UserInput, out char UserChar))
+                else if (multipage && char.TryParse(UserInput, out UserChar))
                 {
                     if ((UserChar == NextChar) && (CurrentPage < (pagesNeeded - 1)))
                         CurrentPage++;
@@ -145,7 +165,7 @@ namespace eq2crate
                         continue;
                 }
                 else if (char.TryParse(UserInput, out _))
-                    continue;
+                    EndMenu = true;
                 else if (multipage && (UserInput == NextNext))
                 {
                     if ((CurrentPage + FastFast) <= (pagesNeeded - 1))
@@ -174,7 +194,7 @@ namespace eq2crate
                     else
                         CurrentPage = 0;
                 }
-            } while (!EndMenu);
+            }while (!EndMenu);
             return UserInt;
         }
         internal void PrintCurrentPage(List<string> CurrentPage)
@@ -183,9 +203,7 @@ namespace eq2crate
             {
                 Console.Write("| ");
                 Console.Write(MenuEntry);
-                int PadNeeded = (0 - MenuEntry.Length - 2) % MaxWide;
-                while (PadNeeded < 0)
-                    PadNeeded += MaxWide;
+                int PadNeeded = ((0 - MenuEntry.Length - 2) % MaxWide) + MaxWide;
                 Console.Write("|\n".PadLeft(PadNeeded));
             }
         }
@@ -200,9 +218,14 @@ namespace eq2crate
             {
                 int Midpoint = (MaxWide - Title.Length - 2) / 2;
                 int Endpoint = MaxWide - Midpoint - Title.Length - 1;
-                Console.WriteLine(string.Concat(AsciiCorner.PadRight(Midpoint, '-'), Title, AsciiCorner.PadLeft(Endpoint, '-')));
+                StringBuilder sb = new StringBuilder();
+                sb.Append(AsciiCorner.PadRight(Midpoint, '-'));
+                sb.Append(Title);
+                sb.Append(AsciiCorner.PadLeft(Endpoint, '-'));
+                Console.WriteLine(sb.ToString());
             }
         }
+/*
         internal int GetLongestStringLength(List<string> MenuItems)
         {
             int[] Lengths = new int[MenuItems.Count];
@@ -210,29 +233,31 @@ namespace eq2crate
                 Lengths[counter] = MenuItems[counter].Length;
             return Lengths.Max();
         }
+*/
         internal List<string> FixOverlong(List<string> MenuItems)
         {
-            int MyWide = MaxWide - 3;
             List<int> Overlongs = new List<int>();
             for (int counter = 0; counter < MenuItems.Count; counter++)
             {
-                if (MenuItems[counter].Length > MyWide)
+<<<<<<< Updated upstream
+                if (MenuItems[counter].Length >= MyWide)
+=======
+                if (MenuItems[counter].Length > MaxWide)
+>>>>>>> Stashed changes
                     Overlongs.Add(counter);
             }
             if (Overlongs.Count == 0)
                 return MenuItems;
             for (int counter = Overlongs.Count - 1; counter >= 0; counter--)
             {
-                int WordCounter = 0, LinesNeeded = (MenuItems[Overlongs[counter]].Length / MaxWide) + 1,
-                    LengthRemaining;
-                if (LinesNeeded < 2)
-                    LinesNeeded = 2;
+                int WordCounter = 0;
+                int LengthRemaining;
+                int LinesNeeded = (MenuItems[Overlongs[counter]].Length / MaxWide) + 1;
                 StringBuilder NewMenuItem = new StringBuilder();
                 string[] MenuItemBreakup = MenuItems[Overlongs[counter]].Split(' ');
-                int InnerCounter;
-                for (InnerCounter = 0; InnerCounter < LinesNeeded; InnerCounter++)
+                for (int InnerCounter = 0; InnerCounter < LinesNeeded; InnerCounter++)
                 {
-                    LengthRemaining = MyWide;
+                    LengthRemaining = MaxWide;
                     if (InnerCounter > 0)
                     {
                         string CurrentLine = NewMenuItem.ToString().Trim();
@@ -269,11 +294,18 @@ namespace eq2crate
             }
             return MenuItems;
         }
-        internal void FindSize()
+<<<<<<< Updated upstream
+=======
+        internal void FindSize(List<string> MenuItems, string Title)
         {
             double paddings;
             MaxLong = Console.WindowHeight - 5; // (Top & bottom borders, top & bottom margins, and prompt)
-            paddings = Math.Floor(Math.Log10(MaxLong)) + 1;
+            int WidestOption = MenuItems.Select(p => p.Length).Max() + 1;
+            if ((Title == null) || (WidestOption > Title.Length))
+                MaxWide = WidestOption;
+            else
+                MaxWide = Title.Length;
+            paddings = Math.Ceiling(Math.Log10(MenuItems.Count));
             string PaddingZeroBuilder = "", PaddingSpaceBuilder = "";
             for (int counter = 0; counter < paddings; counter++)
             {
@@ -282,8 +314,18 @@ namespace eq2crate
                     PaddingSpaceBuilder = string.Concat(PaddingSpaceBuilder, ' ');
 
             }
+            MaxWide += 5; // Left and right borders + Left and right margins + 1 for the decimal.
+            MaxWide += PaddingZeroBuilder.Length;
+            if (MaxWide % 5 == 0)
+                MaxWide += 5;
+            else
+            {
+                while (MaxWide % 5 != 0)
+                    MaxWide++;
+            }
             paddingZeros = PaddingZeroBuilder;
             paddingSpaces = PaddingSpaceBuilder;
         }
+>>>>>>> Stashed changes
     }
 }

@@ -5,7 +5,7 @@ using System.Xml.Linq;
 
 namespace eq2crate
 {
-    public class Character
+    public class Character:IComparable<Character>
     {
         public string name, ts_class;
         public short adv_lvl, adv_class, ts_lvl;
@@ -125,6 +125,20 @@ namespace eq2crate
         public override string ToString()
         {
             return name;
+        }
+        public override bool Equals(object obj)
+        {
+            if (GetType() != obj.GetType())
+                return false;
+            return string.Equals(name, obj.ToString());
+        }
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
+        }
+        public int CompareTo(Character x)
+        {
+            return string.Compare(name, x.name);
         }
     }
 }

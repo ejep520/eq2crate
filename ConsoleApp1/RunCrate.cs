@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Activities.Statements;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -13,62 +12,37 @@ namespace eq2crate
 {
     public class RunCrate
     {
-        internal static HttpClient httpClient = new HttpClient();
-        /// <value>This is the base URL for all searches made against the Daybreak server.</value>
+        private static readonly HttpClient client = new HttpClient();
         public const string urlBase = @"http://census.daybreakgames.com/s:ejep520/xml/get/eq2/";
-        ///<value>This is the URL snippet employed when attempting to get a single character, either by ID or name.</value>
-        public const string urlCharacter = @"character/?c:show=type,displayname,secondarytradeskills,skills.transmuting,spell_list";
-        ///<value>This is the URL snippet employed when attempting to get a count of all characters with a given name or ID number.</value>
-        public const string urlCharCount = @"character/?c:show=returned&c:limit=20";
-        ///<value>This URL snippet should be used immediately before a Daybreak ID number (<see cref="long"/>).</value>
+        public const string urlSpell = @"spell/?c:show=crc,tier&id=";
+        public const string urlCharacter = @"character/?c:show=type,displayname,secondarytradeskills,skills.transmuting,spell_list&id=";
         public const string urlIDGet = @"&id=";
-        ///<value>This URL snippet should be used immediately before a mixed-case search key (<see cref="string"/>).</value>
         public const string urlNameGet = @"&displayname=^";
-        ///<value>This is the URL snippet employed when attempting to get the list of known recipies for a character.</value>
-        public const string urlCharMisc = @"character_misc/?c:show=known_recipe_list";
-        /// <value>This is the default name of the items file. All default files are presumed to be in the working directory.</value>
-        private const string ItemFile = "Items.bin";
-        /// <value>This is the default name of the characters file. All default files presumed to be in the working directory.</value>
-        private const string CharFile = "Characters.bin";
-        /// <value>This is the default name of the options file. All default files presumed to be in the working directory.</value>
-        private const string OptsFile = "CrateOptions.bin";
-        /// <value>This is the default name of the items backup file. All default files presumed to be in the working directory.</value>
-        private const string ItemBak = "Items.bak";
-        /// <value>This is the default name of the characters backup file. All default files presumed to be in the working directory.</value>
-        private const string CharBak = "Characters.bak";
-        /// <value>This is the default name of the options backup file. All default files presumed to be in the working directory.</value>
-        private const string OptsBak = "CrateOptions.bak";
-        /// <value>This is the default name of the failsafe items file. All default files presumed to be in the working directory.</value>
-        private const string ItemBad = "Items.tmp";
-        /// <value>This is the default name of the failsafe characters file. All default files presumed to be in the working directory.</value>
-        private const string CharBad = "Characters.tmp";
-        /// <value>This is the default name of the failsafe options file. All default files presumed to be in the working directory.</value>
-        private const string OptsBad = "CrateOptions.tmp";
-        ///<value>thisMenu is a memory-saving device. Rather than making new menu objects, please reuse this.</value>
-        private readonly Menu thisMenu = new Menu();
-        ///<value>This holds the crate of items currently in memory. There are many boxes just like it, but this one is your's.</value>
-        private readonly Crate thisCrate = new Crate();
-        ///<value>This is the list of characters currently in memory.</value>
-        private readonly List<Character> charList = new List<Character>();
-        ///<value>This is the location of the temporary Items file. Its name and location are generated at runtime. </value>
-        private readonly string TempCrate = Path.GetTempFileName();
-        ///<value>This is the location of the temporary Characters file. Its name and location are generated at runtime. </value>
+        public const string urlCharMisc = @"character_misc/?c:show=known_recipie_list";
         private readonly string TempChars = Path.GetTempFileName();
-        ///<value>This is the location of the temporary Options file. Its name and location are generated at runtime. </value>
+        private readonly string TempCrate = Path.GetTempFileName();
         private readonly string TempOpts = Path.GetTempFileName();
-        private bool dirtyCharacters = false;
-        private bool dirtyCrate = false;
-        private bool dirtyOpts = false;
-        ///<value>This boolian allows the program to go into "offline" mode.</value>
+        private const string CharBad = "Characters.tmp";
+        private const string ItemBad = "Items.tmp";
+        private const string OptsBad = "CrateOptions.tmp";
+        private const string CharFile = "Characters.bin";
+        private const string ItemFile = "Items.bin";
+        private const string OptsFile = "CrateOptions.bin";
+        private const string CharBak = "Characters.bak";
+        private const string ItemBak = "Items.bak";
+        private const string OptsBak = "CrateOptions.bak";
+        private readonly Menu thisMenu = new Menu();
         public bool goOnline = true;
-        /// <value>This boolian determines if the crate allows HEIRLOOM flagged items.</value>
         public bool heirloomFriendly = false;
-        /// <summary>
-        /// Run by the main program. This is the main engine of the program. It does things then gets discarded when done.
-        /// </summary>
-        /// <exception cref="Exception">Thrown if there is an error loading the data.</exception>
+        public bool dirtyCharacters = false;
+        public bool dirtyCrate = false;
+        public bool dirtyOpts = false;
+        public readonly List<Character> charList = new List<Character>();
+        public readonly Crate thisCrate = new Crate();
         public RunCrate()
         {
+// <<<<<<< Updated upstream
+// =======
             // Test_Menu();
             // Test_crate();
             if (LoadData() > 0)
@@ -339,7 +313,11 @@ namespace eq2crate
                                     break;
                                 case 2:
                                     if (charList.Count > 0)
-                                        Console.WriteLine("List the characters.");
+                                    {
+                                        menu_choices.Clear();
+                                        menu_choices = charList.Select(p => p.name).ToList();
+                                        _ = thisMenu.ThisMenu(menu_choices, false, "Current characters");
+                                    }
                                     else
                                         UserError();
                                     break;
@@ -350,7 +328,60 @@ namespace eq2crate
                         } while (!ExitCharMenu);
                         break;
                     case 3:
-                        // ProgramOptions();
+                        bool ExitOptionsMenu = false;
+                        do
+                        {
+                            menu_choices.Clear();
+                            if (goOnline)
+                                menu_choices.Add("EQ2Crate is online! Go offline?");
+                            else
+                                menu_choices.Add("EQ2Crate is offline! Go online?");
+                            if (heirloomFriendly)
+                                menu_choices.Add("This crate is currently HEIRLOOM friendly.");
+                            else
+                                menu_choices.Add("This crate is currently HEIRLOOM unfriendly.");
+                            switch (thisMenu.ThisMenu(menu_choices, true, "Program Options"))
+                            {
+                                case -1:
+                                    ExitOptionsMenu = true;
+                                    break;
+                                case 0:
+                                    goOnline = !goOnline;
+                                    break;
+                                case 1:
+                                    heirloomFriendly = !heirloomFriendly;
+                                    if (heirloomFriendly)
+                                    { }
+                                    else if (thisCrate.Select(p => p.IsHeirloom).Contains(true))
+                                    {
+                                        Console.Write("The crate currently contains HEIRLOOM flaged items. Do you want to DELETE them (Y/n)? ");
+                                        if (Console.ReadLine().ToLower().StartsWith("n"))
+                                        {
+                                            Console.WriteLine("Restoring the crate's HEIRLOOM friendliness. Press Enter to continue.");
+                                            heirloomFriendly = true;
+                                            _ = Console.ReadLine();
+                                        }
+                                        else
+                                        {
+                                            List<CrateItem> TempList = new List<CrateItem>();
+                                            int removedCounter = 0;
+                                            foreach (CrateItem thisItem in thisCrate)
+                                            {
+                                                if (!thisItem.IsHeirloom)
+                                                    TempList.Add(thisItem);
+                                                else
+                                                    removedCounter++;
+                                            }
+                                            Console.WriteLine($"Deleted {removedCounter} item(s). Press Enter to continue.");
+                                            _ = Console.ReadLine();
+                                            thisCrate.Clear();
+                                            thisCrate.AddRange(TempList);
+                                            TempList.Clear();
+                                        }
+                                    }
+                                    break;
+                            }
+                        } while (!ExitOptionsMenu);
                         break;
                     default:
                         Console.WriteLine("Sorry, I didn't recognize that choice.");
@@ -367,13 +398,25 @@ namespace eq2crate
         internal void RunPlayer()
         {
             List<string> characterNames = charList.Select(p => p.name).ToList();
-            int characterChoice = thisMenu.ThisMenu(characterNames, true, "Who are you playing as?");
-            if (characterChoice == -1)
+            int characterChoice;
+            if (charList.Count == 0)
+            {
+                Console.WriteLine("No characters currently exist to play as. Try adding some, then come back.");
+                Console.Write("Press Enter to return to the main menu.");
+                _ = Console.ReadLine();
                 return;
-            else if ((characterChoice >= 0) && (characterChoice < characterNames.Count))
-                Console.WriteLine("We're going to do some stuff here. You'll see!");
+            }
+            else if (charList.Count == 1)
+            {
+                characterChoice = 0;
+            }
             else
-                Console.WriteLine("Well that response was just too big!");
+            {
+                characterChoice = thisMenu.ThisMenu(characterNames, true, "Who are you playing as?");
+                if (characterChoice == -1)
+                    return;
+            }
+            Console.WriteLine("We're going to do some stuff here. You'll see!");
             Console.Write("Press Enter to continue.");
             _ = Console.ReadLine();
         }
@@ -450,24 +493,46 @@ namespace eq2crate
         {
             BinaryWriter OptionsWriter = new BinaryWriter(File.OpenWrite(TempOpts));
             OptionsWriter.Write(goOnline);
+            OptionsWriter.Write(heirloomFriendly);
             OptionsWriter.Flush();
             OptionsWriter.Close();
             OptionsWriter.Dispose();
             return 0;
         }
+        private void UserError()
+        {
+            Console.WriteLine("That was an incorrect response. Press Enter to continue.");
+            _ = Console.ReadLine();
+        }
+        public static XDocument GetThisUrl(string RequestURL)
+        {
+            XDocument return_value;
+            int err_count = 0;
+            Task<string> rawXML = client.GetStringAsync(RequestURL);
+            rawXML.Wait();
+            while (rawXML.IsFaulted && (err_count < 3))
+            {
+                err_count++;
+                Thread.Sleep(3000);
+                rawXML = client.GetStringAsync(RequestURL);
+                rawXML.Wait();
+            }
+            if (err_count >= 3)
+                throw rawXML.Exception;
+            return_value = XDocument.Parse(rawXML.Result);
+            return return_value;
+        }
+
         /*
         public void TestCrate(long itemNum)
         {
             Crate TestCrate = new Crate();
-            TestCrate.Add(TestCrate.GetItemFromID(itemNum));
+            TestCrate.Add(TestCrate.GetItemFromID(1548500063));
             Console.WriteLine(TestCrate[0].ToString());
             Console.WriteLine($"Test Crate Max adv lvl is {TestCrate.max_adv_lvl}");
             Console.WriteLine($"Test Crate Max ts lvl is {TestCrate.max_ts_lvl}");
             _ = Console.ReadLine();
-            TestXml(itemNum);
         }
-        */
-        /*
         public void TestJsonToXml()
         {
             _ = DoTask();
@@ -495,8 +560,6 @@ namespace eq2crate
                 Console.WriteLine("Nothing here. Oh Well.");
             await thisOut;
         }
-        */
-        /*
         public void Test_Menu()
         {
             Menu menu = new Menu();
@@ -504,250 +567,44 @@ namespace eq2crate
             {
                 "Test Menu Item 1",
                 "Test Menu Item 2 Lorum Ipsum",
-                "Test Menu Item 3 This is a"
+                "Test Menu Item 3 This is a long entry that has lots of text and things and stuff. Things! And More stuff!",
             };
-            // for (int counter = 4; counter <= 700; counter++)
-                // TestMenu.Add($"Test Menu Item {counter}");
+            for (int counter = 4; counter <= 700; counter++)
+                TestMenu.Add($"Test Menu Item {counter}");
             int ReturnVal = menu.ThisMenu(TestMenu, true, "Test Menu");
             Console.Clear();
             Console.WriteLine($"The returned value was {ReturnVal}.");
-            _ = Console.ReadLine();
+            Console.ReadLine();
         }
-        */
-        /*
-        public void TestXml(long itemNum)
+/*        public void TestXml()
         {
-            Console.WriteLine(string.Concat("Getting ", urlBase, $"item/?id={itemNum}"));
-            Task<string> response = client.GetStringAsync(string.Concat(urlBase, "item/?id=", itemNum.ToString()));
-            XDocument document = XDocument.Parse(response.Result);
-            XElement ItemInfoElement;
-            if (int.Parse(document.Root.Attribute("returned").Value) > 0)
+            Console.WriteLine(string.Concat("Getting ", urlBase, "item/"));
+            Task<string> response = client.GetStringAsync(string.Concat(urlBase, "item/"));
+            XmlDocument document = new XmlDocument();
+            document.LoadXml(response.Result);
+            XmlNode itemList = document.DocumentElement;
+            XmlNode ItemInfoNode;
+            if (int.Parse(itemList.Attributes["returned"].Value) > 0)
             {
-                ItemInfoElement = document.Root.Element("item");
-                string ItemName = Crate.DeHtmlText(ItemInfoElement.Attribute("displayname").Value);
-                if (long.TryParse(ItemInfoElement.Attribute("id").Value, out long IdNumber))
-                    Console.WriteLine($"{ItemName} id number is {IdNumber}");
+                ItemInfoNode = itemList.FirstChild;
+                string ItemName = ItemInfoNode.Attributes["displayname"].Value;
+                if (long.TryParse(ItemInfoNode.Attributes["id"].Value, out long IdNumber))
+                    Console.WriteLine(string.Format("{0} id number is {1}", ItemName, IdNumber));
                 else
-                    Console.WriteLine($"Unable to parse the ID of {ItemName}");
-                if (ushort.TryParse(ItemInfoElement.Attribute("typeid").Value, out ushort ItemType))
-                    Console.WriteLine($"Type ID is {ItemType}");
+                    Console.WriteLine(string.Format("Unable to parse the ID of {0}", ItemName));
+                if (ushort.TryParse(ItemInfoNode.Attributes["typeid"].Value, out ushort ItemType))
+                    Console.WriteLine(string.Format("Type ID is {0}", ItemType));
                 else
                     Console.WriteLine("Unable to parse the Type ID.");
-                if (ushort.TryParse(ItemInfoElement.Attribute("itemlevel").Value, out ushort ItemLevel))
-                    Console.WriteLine($"Item Level is {ItemLevel}");
+                if (ushort.TryParse(ItemInfoNode.Attributes["itemlevel"].Value, out ushort ItemLevel))
+                    Console.WriteLine(string.Format("Item Level is {0}", ItemLevel));
                 else
                     Console.WriteLine("Unable to parse the item level.");
-                if (Crate.HasHeirloom(ItemInfoElement))
-                    Console.WriteLine("Item is heirloom.");
-                else
-                    Console.WriteLine("Item is not heirloom.");
-                if (Crate.HasDescription(ItemInfoElement))
-                    Console.WriteLine($"Description: {Crate.DeHtmlText(ItemInfoElement.Attribute("description").Value)}");
-                else
-                    Console.WriteLine("This item has no description.");
-                if (Crate.HasLore(ItemInfoElement))
-                    Console.WriteLine("This item is LORE flagged.");
-                else
-                    Console.WriteLine("This item is not LORE flagged.");
+
             }
             else
                 Console.WriteLine("False");
             _ = Console.ReadLine();
-        }
-        */
-        /// <summary>
-        /// The user did something outside the bounds. Say so and continue.
-        /// </summary>
-        internal void UserError()
-        {
-            Console.WriteLine("I didn't understand that choice.");
-            Console.Write("Press Enter to try again.");
-            _ = Console.ReadLine();
-        }
-        /// <summary>
-        /// Lists the items in the crate by name. The <paramref name="NeedReturnVal"/> is passed to the Menu call.
-        /// </summary>
-        /// <param name="NeedReturnVal">Do you need to know what the user selected?</param>
-        /// <returns>Menu returned int value.</returns>
-        internal int ListItemsInCrate(bool NeedReturnVal = false)
-        {
-            List<string> crate_items = thisCrate.Select(item => item.ItemName).ToList();
-            return thisMenu.ThisMenu(crate_items, NeedReturnVal, "Current items");
-        }
-        /// <summary>
-        /// Attempts to add an item to the crate by querying the user for identifying details.
-        /// </summary>
-        /// <returns>
-        ///     <list type="bullet">
-        ///         <item>
-        ///             <term>True</term>
-        ///             <description>An item was successfully added.</description>
-        ///         </item>
-        ///         <item>
-        ///             <term>False</term>
-        ///             <description>No item was added.</description>
-        ///         </item>
-        ///     </list>
-        /// </returns>
-        internal bool AddItemToCrate()
-        {
-            bool returnValue = false;
-            CrateItem newItem;
-            Console.WriteLine("Do you have the Daybreak item ID number? (y/N)");
-            Console.Write("==> ");
-            if (Console.ReadLine().ToLower().StartsWith("y"))
-            {
-                long UserLong;
-                Console.WriteLine("Please enter the Daybreak item ID number.");
-                Console.Write("==> ");
-                while ((!long.TryParse(Console.ReadLine(), out UserLong)) || (UserLong < 0))
-                {
-                    Console.Write("That was not a valid value. Please enter the Daybreak ID number of the item or '0' to cancel.");
-                    Console.Write("==> ");
-                }
-                if (UserLong == 0)
-                    return returnValue;
-                newItem = thisCrate.GetItemFromID(UserLong);
-            }
-            else
-            {
-                Console.WriteLine("Please enter the name of the item you would like to add.");
-                Console.Write("==> ");
-                newItem = thisCrate.GetItemFromName(Console.ReadLine());
-            }
-            if (newItem.IsLore)
-            {
-                Console.WriteLine("This item is LORE flagged. Quantity automagically set to 1. Press Enter to continue.");
-                _ = Console.ReadLine();
-                newItem.ItemQuantity = 1;
-            }
-            else
-            {
-                short newQuantity;
-                Console.WriteLine($"How many copies of {newItem.ItemName} do you want to add?");
-                Console.Write("==> ");
-                while ((!short.TryParse(Console.ReadLine(), out newQuantity)) || (newQuantity < 1))
-                {
-                    Console.WriteLine("That was an invalid number.");
-                    Console.WriteLine($"How many copies of {newItem.ItemName} do you want to add?");
-                    Console.Write("==> ");
-                }
-                if (newQuantity == 0)
-                    return returnValue;
-                newItem.ItemQuantity = newQuantity;
-            }
-            if (heirloomFriendly)
-            { }
-            else if (newItem.IsHeirloom)
-            {
-                Console.WriteLine("This crate does not accept HEIRLOOM flagged items.");
-                returnValue = false;
-            }
-            else
-            {
-                thisCrate.Add(newItem);
-                if (SaveCrate() != 0)
-                    throw new Exception();
-                returnValue = true;
-                thisCrate.Sort();
-            }
-            return returnValue;
-        }
-        internal bool RemoveItem()
-        {
-            bool return_val;
-            int RemoveVal = ListItemsInCrate(true);
-            if (RemoveVal < 0)
-                return_val = false;
-            else
-            {
-                thisCrate.RemoveAt(RemoveVal);
-                return_val = true;
-            }
-            return return_val;
-        }
-        internal bool AddCharacter()
-        {
-            bool return_val;
-            Console.Write("Do you have the Daybreak ID number of the character you want to add (y/N)?  ");
-            if (Console.ReadLine().ToLower().StartsWith("y"))
-            {
-                Console.Write("Please enter the Daybreak ID number of the character you want to add.  ");
-                if (long.TryParse(Console.ReadLine(), out long new_char_num))
-                {
-                    charList.Add(new Character(new_char_num));
-                }
-                return_val = true;
-            }
-            else
-            {
-                Console.WriteLine("Please enter the name of the character. Remember: Capitolization and spelling count!");
-                Console.Write("==>  ");
-                string get_url = string.Concat(urlBase, urlCharCount, urlNameGet, Console.ReadLine());
-                XDocument BasicXML = GetThisUrl(get_url), MiscXML;
-                if (!int.TryParse(BasicXML.Element("character_list").Attribute("returned").Value, out int returned_chars))
-                {
-                    Console.WriteLine("Unable to determine how many characters were returned. Abending.");
-                    throw new Exception();
-                }
-                switch (returned_chars)
-                {
-                    case 0:
-                        Console.Write("No characters with the given name were found. Press Enter to continue.");
-                        _ = Console.ReadLine();
-                        return_val = false;
-                        break;
-                    case 1:
-                        get_url = string.Concat(urlBase, urlCharMisc, urlIDGet, BasicXML.Element("character_list").Element("character").Attribute("id").Value);
-                        MiscXML = GetThisUrl(get_url);
-                        charList.Add(new Character(BasicXML.Element("character_list"), MiscXML.Element("character_misc_list")));
-                        return_val = true;
-                        break;
-                    default:
-                        Console.WriteLine("Too many characters were returned. This will be coded later.");
-                        Console.Write("Press Enter to continue.");
-                        _ = Console.ReadLine();
-                        return_val = false;
-                        break;
-                }
-            }
-            if (return_val)
-            {
-                charList.Sort();
-            }
-            return return_val;
-        }
-        public static XDocument GetThisUrl(string get_url)
-        {
-            XDocument return_val;
-            int err_count = 0;
-            Task<string> raw_xml = httpClient.GetStringAsync(get_url);
-            raw_xml.Wait();
-            while (raw_xml.IsFaulted && (err_count < 3))
-            {
-                Thread.Sleep(3000);
-                err_count++;
-                raw_xml = httpClient.GetStringAsync(get_url);
-                raw_xml.Wait();
-            }
-            if (err_count >= 3)
-                throw raw_xml.Exception;
-            return_val = XDocument.Parse(raw_xml.Result);
-            return return_val;
-        }
-        internal bool RemoveCharacter()
-        {
-            bool return_value;
-            List<string> charNames = charList.Select(p => p.name).ToList();
-            int remove_num = thisMenu.ThisMenu(charNames, true, "Current Characters");
-            if (remove_num < 0)
-                return_value = false;
-            else
-            {
-                charList.RemoveAt(remove_num);
-                return_value = true;
-            }
-            return return_value;
-        }
+        } */
     }
 }
