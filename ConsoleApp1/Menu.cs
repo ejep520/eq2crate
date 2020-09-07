@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace eq2crate
 {
@@ -38,22 +36,12 @@ namespace eq2crate
             int pagesNeeded;
             string Footer = string.Empty;
             List<string>[] Pages;
-<<<<<<< Updated upstream
-            bool multipage = false;
-            MaxLong = Console.WindowHeight - 5; // (Top & bottom borders, top & bottom margins, and prompt)
-=======
-            FindSize(MenuItems, Title);
->>>>>>> Stashed changes
             if (ReturnResponse)
                 MenuItems.Insert(0, "Cancel");
             else
                 Footer = DefaultFooter;
-<<<<<<< Updated upstream
-            if (MenuItems.Count > MaxLong)
-                multipage = true;
-=======
-            multipage = MenuItems.Count > MaxLong;
->>>>>>> Stashed changes
+            FindSize(MenuItems, Title);
+            bool multipage = MenuItems.Count > MaxLong;
             if (multipage)
             {
                 int ItemsPerPage = MaxLong - 2;
@@ -239,11 +227,7 @@ namespace eq2crate
             List<int> Overlongs = new List<int>();
             for (int counter = 0; counter < MenuItems.Count; counter++)
             {
-<<<<<<< Updated upstream
-                if (MenuItems[counter].Length >= MyWide)
-=======
                 if (MenuItems[counter].Length > MaxWide)
->>>>>>> Stashed changes
                     Overlongs.Add(counter);
             }
             if (Overlongs.Count == 0)
@@ -294,8 +278,6 @@ namespace eq2crate
             }
             return MenuItems;
         }
-<<<<<<< Updated upstream
-=======
         internal void FindSize(List<string> MenuItems, string Title)
         {
             double paddings;
@@ -326,6 +308,5 @@ namespace eq2crate
             paddingZeros = PaddingZeroBuilder;
             paddingSpaces = PaddingSpaceBuilder;
         }
->>>>>>> Stashed changes
     }
 }

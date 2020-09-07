@@ -5,12 +5,14 @@ using System.Xml.Linq;
 
 namespace eq2crate
 {
+    [Serializable]
     public class Character:IComparable<Character>
     {
         public string name, ts_class;
         public short adv_lvl, adv_class, ts_lvl;
         public long char_id;
         public List<long> recipies, spells;
+        public readonly Dictionary<long, short> crc_dict = new Dictionary<long, short>();
         /// <summary>
         /// This is a do-nothing constructor with default values. Just don't use it. Please.
         /// </summary>
@@ -121,6 +123,58 @@ namespace eq2crate
                 Console.WriteLine("Unable to get the character's recipies.");
                 recipies = new List<long>();
             }
+            foreach (long thisSpell in spells)
+            {
+                long spell_crc;
+                short spell_tier;
+                XDocument SpellRaw = RunCrate.GetThisUrl(string.Concat(RunCrate.urlBase, RunCrate.urlSpell, RunCrate.urlIDGet, thisSpell.ToString()));
+                XElement SpellCooked = SpellRaw.Element("spell_list");
+                switch (int.Parse(SpellCooked.Attribute("returned").Value))
+                {
+                    case 0:
+                        break;
+                    case 1:
+                        spell_crc = long.Parse(SpellCooked.Element("spell").Attribute("crc").Value);
+                        spell_tier = short.Parse(SpellCooked.Element("spell").Attribute("tier").Value);
+                        if (crc_dict.ContainsKey(spell_crc))
+                        {
+
+                            Console.WriteLine($"{name} has two spells with the crc {spell_crc}.");
+                            Console.Write("Press Enter to continue.");
+                            _ = Console.ReadLine();
+                        }
+                        else
+                        {
+                            crc_dict.Add(spell_crc, spell_tier);
+                        }
+                        break;
+                    default:
+                        Console.WriteLine($"Found too many spells based on ID {thisSpell}.");
+                        Console.Write("Press Enter to continue.");
+                        _ = Console.ReadLine();
+                        break;
+                }
+            }
+            if (spells.Count >= crc_dict.Count)
+            { }
+            else
+            {
+                Console.WriteLine("The number of spells does not equal the number of crc dictionary entries.");
+                Console.WriteLine("Sanity check fails.");
+                Console.Write("Press Enter to continue.");
+                _ = Console.ReadLine();
+            }
+        }
+        public void ExamineCharacter()
+        {
+            string outValue = $"Name: {name}\n";
+            outValue = string.Concat(outValue, $"Adventurer: {adv_lvl} {adv_class}\n");
+            outValue = string.Concat(outValue, $"Tradeskill: {ts_lvl} {ts_class}\n");
+            outValue = string.Concat(outValue, $"Recipie count: {recipies.Count}\n");
+            outValue = string.Concat(outValue, $"Spell count: {spells.Count}\n");
+            Console.WriteLine(outValue);
+            Console.Write("Press Enter to continue.");
+            _ = Console.ReadLine();
         }
         public override string ToString()
         {
@@ -140,5 +194,6 @@ namespace eq2crate
         {
             return string.Compare(name, x.name);
         }
+
     }
 }

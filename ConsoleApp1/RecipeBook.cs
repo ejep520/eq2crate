@@ -1,8 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Text;
 
 namespace eq2crate
 {
+    [Serializable]
     class RecipeBook:CrateItem
     {
         public new const short ItemType = 7;

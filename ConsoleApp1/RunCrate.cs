@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,36 +13,39 @@ namespace eq2crate
 {
     public class RunCrate
     {
-        internal static HttpClient httpClient = new HttpClient();
-        /// <value>This is the base URL for all searches made against the Daybreak server.</value>
+        ///<value>This is the base URL for all searches made against the Daybreak server.</value>
         public const string urlBase = @"http://census.daybreakgames.com/s:ejep520/xml/get/eq2/";
         ///<value>This is the URL snippet employed when attempting to get a single character, either by ID or name.</value>
         public const string urlCharacter = @"character/?c:show=type,displayname,secondarytradeskills,skills.transmuting,spell_list";
         ///<value>This is the URL snippet employed when attempting to get a count of all characters with a given name or ID number.</value>
         public const string urlCharCount = @"character/?c:show=returned&c:limit=20";
+        ///<value>This is the URL snippet employed when attempting to divine spell information. In Daybreak/SOE lexicon, spell is a word that gets stretched pretty thin!</value>
+        public const string urlSpell = @"spell/?c:show=crc,tier";
         ///<value>This URL snippet should be used immediately before a Daybreak ID number (<see cref="long"/>).</value>
         public const string urlIDGet = @"&id=";
         ///<value>This URL snippet should be used immediately before a mixed-case search key (<see cref="string"/>).</value>
         public const string urlNameGet = @"&displayname=^";
+        ///<value>This URL stippet should be used when attempting to look up a spell for which the CRC (<see cref="long"/>) is known.</value>
+        public const string urlCRCGet = @"&crc=";
         ///<value>This is the URL snippet employed when attempting to get the list of known recipies for a character.</value>
         public const string urlCharMisc = @"character_misc/?c:show=known_recipe_list";
-        /// <value>This is the default name of the items file. All default files are presumed to be in the working directory.</value>
+        ///<value>This is the default name of the items file. All default files are presumed to be in the working directory.</value>
         private const string ItemFile = "Items.bin";
-        /// <value>This is the default name of the characters file. All default files presumed to be in the working directory.</value>
+        ///<value>This is the default name of the characters file. All default files presumed to be in the working directory.</value>
         private const string CharFile = "Characters.bin";
-        /// <value>This is the default name of the options file. All default files presumed to be in the working directory.</value>
+        ///<value>This is the default name of the options file. All default files presumed to be in the working directory.</value>
         private const string OptsFile = "CrateOptions.bin";
-        /// <value>This is the default name of the items backup file. All default files presumed to be in the working directory.</value>
+        ///<value>This is the default name of the items backup file. All default files presumed to be in the working directory.</value>
         private const string ItemBak = "Items.bak";
-        /// <value>This is the default name of the characters backup file. All default files presumed to be in the working directory.</value>
+        ///<value>This is the default name of the characters backup file. All default files presumed to be in the working directory.</value>
         private const string CharBak = "Characters.bak";
-        /// <value>This is the default name of the options backup file. All default files presumed to be in the working directory.</value>
+        ///<value>This is the default name of the options backup file. All default files presumed to be in the working directory.</value>
         private const string OptsBak = "CrateOptions.bak";
-        /// <value>This is the default name of the failsafe items file. All default files presumed to be in the working directory.</value>
+        ///<value>This is the default name of the failsafe items file. All default files presumed to be in the working directory.</value>
         private const string ItemBad = "Items.tmp";
-        /// <value>This is the default name of the failsafe characters file. All default files presumed to be in the working directory.</value>
+        ///<value>This is the default name of the failsafe characters file. All default files presumed to be in the working directory.</value>
         private const string CharBad = "Characters.tmp";
-        /// <value>This is the default name of the failsafe options file. All default files presumed to be in the working directory.</value>
+        ///<value>This is the default name of the failsafe options file. All default files presumed to be in the working directory.</value>
         private const string OptsBad = "CrateOptions.tmp";
         ///<value>thisMenu is a memory-saving device. Rather than making new menu objects, please reuse this.</value>
         private readonly Menu thisMenu = new Menu();
@@ -55,17 +59,25 @@ namespace eq2crate
         private readonly string TempChars = Path.GetTempFileName();
         ///<value>This is the location of the temporary Options file. Its name and location are generated at runtime. </value>
         private readonly string TempOpts = Path.GetTempFileName();
+        ///<value>A flag indicating if the Characters file needs to be saved to the disk.</value>
         private bool dirtyCharacters = false;
+        ///<value>A flag indicating if the Items file needs to be saved to the disk.</value>
         private bool dirtyCrate = false;
+        ///<value>A flag indicating if the Options file needs to be saved to the disk.</value>
         private bool dirtyOpts = false;
+        ///<value>Client-man. Client-man. Does whatever a client can.</value>
+        private static readonly HttpClient httpClient = new HttpClient();
+        ///<value>This is the binary formatter engine.</value>
+        private readonly BinaryFormatter binaryFormatter = new BinaryFormatter();
         ///<value>This boolian allows the program to go into "offline" mode.</value>
-        public bool goOnline = true;
-        /// <value>This boolian determines if the crate allows HEIRLOOM flagged items.</value>
-        public bool heirloomFriendly = false;
+        public bool goOnline { get; private set; } = true;
+        ///<value>This <see cref="bool"/> determines if the crate allows HEIRLOOM flagged items.</value>
+        public bool heirloomFriendly { get; private set; } = false;
+        ///<value>This <see cref="short"/> indicates the maximum size of the crate.</value>
+        public short MaxCrateSize { get; private set; } = 100;
+        public bool OverflowFriendly { get; private set; } = true;
         public RunCrate()
         {
-// <<<<<<< Updated upstream
-// =======
             // Test_Menu();
             // Test_crate();
             if (LoadData() > 0)
@@ -83,12 +95,204 @@ namespace eq2crate
                 File.Move(TempOpts, OptsBad);
         }
         /// <summary>
+        /// Attempts to add an item to the crate by querying the user for identifying details.
+        /// </summary>
+        /// <returns>
+        ///     <list type="bullet">
+        ///         <item>
+        ///             <term>True</term>
+        ///             <description>An item was successfully added.</description>
+        ///         </item>
+        ///         <item>
+        ///             <term>False</term>
+        ///             <description>No item was added.</description>
+        ///         </item>
+        ///     </list>
+        /// </returns>
+        private bool AddCharacter()
+        {
+            bool return_val;
+            Console.Write("Do you have the Daybreak ID number of the character you want to add (y/N)?  ");
+            if (Console.ReadLine().ToLower().StartsWith("y"))
+            {
+                Console.Write("Please enter the Daybreak ID number of the character you want to add.  ");
+                if (long.TryParse(Console.ReadLine(), out long new_char_num))
+                {
+                    charList.Add(new Character(new_char_num));
+                }
+                return_val = true;
+            }
+            else
+            {
+                Console.WriteLine("Please enter the name of the character. Remember: Capitolization and spelling count!");
+                Console.Write("==>  ");
+                string get_url = string.Concat(urlBase, urlCharCount, urlNameGet, Console.ReadLine());
+                XDocument BasicXML = GetThisUrl(get_url), MiscXML;
+                if (!int.TryParse(BasicXML.Element("character_list").Attribute("returned").Value, out int returned_chars))
+                {
+                    Console.WriteLine("Unable to determine how many characters were returned. Abending.");
+                    throw new Exception();
+                }
+                switch (returned_chars)
+                {
+                    case 0:
+                        Console.Write("No characters with the given name were found. Press Enter to continue.");
+                        _ = Console.ReadLine();
+                        return_val = false;
+                        break;
+                    case 1:
+                        get_url = string.Concat(urlBase, urlCharMisc, urlIDGet, BasicXML.Element("character_list").Element("character").Attribute("id").Value);
+                        MiscXML = GetThisUrl(get_url);
+                        charList.Add(new Character(BasicXML.Element("character_list"), MiscXML.Element("character_misc_list")));
+                        return_val = true;
+                        break;
+                    default:
+                        Console.WriteLine("Too many characters were returned. This will be coded later.");
+                        Console.Write("Press Enter to continue.");
+                        _ = Console.ReadLine();
+                        return_val = false;
+                        break;
+                }
+            }
+            if (return_val)
+            {
+                charList.Sort();
+            }
+            return return_val;
+        }
+        /// <summary>
+        /// Attempts to add an item to <see cref="thisCrate"/>.
+        /// </summary>
+        /// <returns>
+        /// <list type="bullet">
+        /// <item>
+        /// <term>TRUE</term><description>An item was successfully added.</description>
+        /// </item>
+        /// <item><term>FALSE</term><description>Nothing was added.</description></item>
+        /// </list>
+        /// </returns>
+        private bool AddItemToCrate()
+        {
+            bool returnValue = false;
+            CrateItem newItem;
+            Console.WriteLine("Do you have the Daybreak item ID number? (y/N)");
+            Console.Write("==> ");
+            if (Console.ReadLine().ToLower().StartsWith("y"))
+            {
+                long UserLong;
+                Console.WriteLine("Please enter the Daybreak item ID number.");
+                Console.Write("==> ");
+                while ((!long.TryParse(Console.ReadLine(), out UserLong)) || (UserLong < 0))
+                {
+                    Console.Write("That was not a valid value. Please enter the Daybreak ID number of the item or '0' to cancel.");
+                    Console.Write("==> ");
+                }
+                if (UserLong == 0)
+                    return returnValue;
+                newItem = thisCrate.GetItemFromID(UserLong);
+            }
+            else
+            {
+                Console.WriteLine("Please enter the name of the item you would like to add.");
+                Console.Write("==> ");
+                newItem = thisCrate.GetItemFromName(Console.ReadLine());
+            }
+            if (newItem.IsLore)
+            {
+                Console.WriteLine("This item is LORE flagged. Quantity automagically set to 1. Press Enter to continue.");
+                _ = Console.ReadLine();
+                newItem.ItemQuantity = 1;
+            }
+            else
+            {
+                short newQuantity;
+                Console.WriteLine($"How many copies of {newItem.ItemName} do you want to add?");
+                Console.Write("==> ");
+                while ((!short.TryParse(Console.ReadLine(), out newQuantity)) || (newQuantity < 1))
+                {
+                    Console.WriteLine("That was an invalid number.");
+                    Console.WriteLine($"How many copies of {newItem.ItemName} do you want to add?");
+                    Console.Write("==> ");
+                }
+                if (newQuantity == 0)
+                    return returnValue;
+                newItem.ItemQuantity = newQuantity;
+            }
+            if (heirloomFriendly)
+            { }
+            else if (newItem.IsHeirloom)
+            {
+                Console.WriteLine("This crate does not accept HEIRLOOM flagged items.");
+                returnValue = false;
+            }
+            else
+            {
+                thisCrate.Add(newItem);
+                if (SaveCrate() != 0)
+                    throw new Exception();
+                returnValue = true;
+                thisCrate.Sort();
+            }
+            return returnValue;
+        }
+        /// <summary>
+        /// Returns a <see cref="bool"/> indicating if the crate is (or should be) overflowing.
+        /// </summary>
+        public bool GetOverflowState()
+        {
+            return thisCrate.Count > MaxCrateSize;
+        }
+        /// <summary>
+        /// Attempts to add an item to the crate by querying the user for identifying details.
+        /// </summary>
+        /// <returns>
+        ///     <list type="bullet">
+        ///         <item>
+        ///             <term>True</term>
+        ///             <description>An item was successfully added.</description>
+        ///         </item>
+        ///         <item>
+        ///             <term>False</term>
+        ///             <description>No item was added.</description>
+        ///         </item>
+        ///     </list>
+        /// </returns>
+        public static XDocument GetThisUrl(string get_url)
+        {
+            XDocument return_val;
+            int err_count = 0;
+            Task<string> raw_xml = httpClient.GetStringAsync(get_url);
+            raw_xml.Wait();
+            while (raw_xml.IsFaulted && (err_count < 3))
+            {
+                Thread.Sleep(3000);
+                err_count++;
+                raw_xml = httpClient.GetStringAsync(get_url);
+                raw_xml.Wait();
+            }
+            if (err_count >= 3)
+                throw raw_xml.Exception;
+            return_val = XDocument.Parse(raw_xml.Result);
+            return return_val;
+        }
+        /// <summary>
+        /// Lists the items in the crate by name. The <paramref name="NeedReturnVal"/> is passed to the Menu call.
+        /// </summary>
+        /// <param name="NeedReturnVal">Do you need to know what the user selected?</param>
+        /// <returns>Menu returned int value.</returns>
+        private int ListItemsInCrate(bool NeedReturnVal = false)
+        {
+            List<string> crate_items = thisCrate.Select(item => item.ItemName).ToList();
+            return thisMenu.ThisMenu(crate_items, NeedReturnVal, "Current items");
+        }
+        /// <summary>
         /// Loads the data from existing .bin files, if any.
         /// </summary>
         /// <returns>Any non-zero value indicates an error.</returns>
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0059:Unnecessary assignment of a value", Justification = "Default values are not unnecessary.")]
-        internal int LoadData()
+        private int LoadData()
         {
+            const string U2C = "Unable to continue.";
             int returnValue = 999;
             FileStream binFS = null;
             BinaryReader binaryReader;
@@ -96,7 +300,14 @@ namespace eq2crate
             {
                 Console.Write("There is evidence of an improper shutdown. Do you want to recover lost data (Y/n)?  ");
                 if (Console.ReadLine().ToLower().StartsWith("n"))
-                { }
+                {
+                    if (File.Exists(CharBad))
+                        File.Delete(CharBad);
+                    if (File.Exists(OptsBad))
+                        File.Delete(OptsBad);
+                    if (File.Exists(ItemBad))
+                        File.Delete(ItemBad);
+                }
                 else
                 {
                     if (File.Exists(CharBad))
@@ -155,13 +366,13 @@ namespace eq2crate
                 catch(IOException err)
                 {
                     Console.WriteLine(err.Message);
-                    Console.WriteLine("Unable to continue.");
+                    Console.WriteLine(U2C);
                     return returnValue;
                 }
                 catch(ObjectDisposedException err)
                 {
                     Console.WriteLine(err.Message);
-                    Console.WriteLine("Unable to continue.");
+                    Console.WriteLine(U2C);
                     return returnValue;
                 }
                 try
@@ -173,23 +384,55 @@ namespace eq2crate
                 catch(IOException err)
                 {
                     Console.WriteLine(err.Message);
-                    Console.WriteLine("Unable to continue.");
+                    Console.WriteLine(U2C);
                     return returnValue;
                 }
                 catch(ObjectDisposedException err)
                 {
                     Console.WriteLine(err.Message);
-                    Console.WriteLine("Unable to continue.");
+                    Console.WriteLine(U2C);
+                    return returnValue;
+                }
+                try
+                {
+                    MaxCrateSize = binaryReader.ReadInt16();
+                }
+                catch (EndOfStreamException)
+                { }
+                catch (IOException err)
+                {
+                    Console.WriteLine(err.Message);
+                    Console.WriteLine(U2C);
+                    return returnValue;
+                }
+                catch (ObjectDisposedException err)
+                {
+                    Console.WriteLine(err.Message);
+                    Console.WriteLine(U2C);
+                    return returnValue;
+                }
+                try
+                {
+                    OverflowFriendly = binaryReader.ReadBoolean();
+                }
+                catch (EndOfStreamException)
+                { }
+                catch (IOException err)
+                {
+                    Console.WriteLine(err.Message);
+                    Console.WriteLine(U2C);
+                    return returnValue;
+                }
+                catch (ObjectDisposedException err)
+                {
+                    Console.WriteLine(err.Message);
+                    Console.WriteLine(U2C);
                     return returnValue;
                 }
                 binaryReader.Dispose();
+                binFS.Close();
                 binFS.Dispose();
                 binFS = null;
-                File.Delete(TempOpts);
-                File.Copy(OptsFile, TempOpts);
-                if (File.Exists(OptsBak))
-                    File.Delete(OptsBak);
-                File.Move(OptsFile, OptsBak);
             }
             try
             {
@@ -205,19 +448,13 @@ namespace eq2crate
             }
             if (binFS != null)
             {
-                binaryReader = new BinaryReader(binFS, Encoding.UTF8);
-                while (binFS.Position < binFS.Length)
-                {
-                    charList.Add(new Character(binaryReader.ReadInt64()));
-                }
-                binaryReader.Dispose();
+                List<Character> TempList = new List<Character>();
+                TempList = (List<Character>)binaryFormatter.Deserialize(binFS);
+                charList.Clear();
+                charList.AddRange(TempList);
+                binFS.Close();
                 binFS.Dispose();
                 binFS = null;
-                File.Delete(TempChars);
-                File.Copy(CharFile, TempChars);
-                if (File.Exists(CharBak))
-                    File.Delete(CharBak);
-                File.Move(CharFile, CharBak);
             }
             try
             {
@@ -227,21 +464,11 @@ namespace eq2crate
             { }
             if (binFS != null)
             {
-                binaryReader = new BinaryReader(binFS, Encoding.UTF8);
-                CrateItem thisItem;
-                while (binFS.Position < binFS.Length)
-                {
-                    thisItem = thisCrate.GetItemFromID(binaryReader.ReadInt64());
-                    thisItem.ItemQuantity = binaryReader.ReadInt16();
-                    thisCrate.Add(thisItem);
-                }
-                binaryReader.Dispose();
+                Crate TempCrate = (Crate)binaryFormatter.Deserialize(binFS);
+                thisCrate.Clear();
+                thisCrate.AddRange(TempCrate);
+                binFS.Close();
                 binFS.Dispose();
-                File.Delete(TempCrate);
-                File.Copy(ItemFile, TempCrate);
-                if (File.Exists(ItemBak))
-                    File.Delete(ItemBak);
-                File.Move(ItemFile, ItemBak);
             }
             returnValue = 0;
             return returnValue;
@@ -363,6 +590,11 @@ namespace eq2crate
                                 menu_choices.Add("This crate is currently HEIRLOOM friendly.");
                             else
                                 menu_choices.Add("This crate is currently HEIRLOOM unfriendly.");
+                            menu_choices.Add($"This crate can currently hold {MaxCrateSize} item(s).");
+                            if (OverflowFriendly)
+                                menu_choices.Add("This crate is allowed to overflow.");
+                            else
+                                menu_choices.Add("This crate is NOT allowed to overflow.");
                             switch (thisMenu.ThisMenu(menu_choices, true, "Program Options"))
                             {
                                 case -1:
@@ -370,11 +602,14 @@ namespace eq2crate
                                     break;
                                 case 0:
                                     goOnline = !goOnline;
+                                    dirtyOpts = true;
                                     break;
                                 case 1:
                                     heirloomFriendly = !heirloomFriendly;
                                     if (heirloomFriendly)
-                                    { }
+                                    {
+                                        dirtyOpts = true;
+                                    }
                                     else if (thisCrate.Select(p => p.IsHeirloom).Contains(true))
                                     {
                                         Console.Write("The crate currently contains HEIRLOOM flaged items. Do you want to DELETE them (Y/n)? ");
@@ -400,28 +635,129 @@ namespace eq2crate
                                             thisCrate.Clear();
                                             thisCrate.AddRange(TempList);
                                             TempList.Clear();
+                                            dirtyOpts = true;
                                         }
                                     }
+                                    break;
+                                case 2:
+                                    bool userInError = false;
+                                    Console.WriteLine("What is the new size limit of this crate?");
+                                    Console.Write("===> ");
+                                    string userReply = Console.ReadLine();
+                                    if (string.IsNullOrEmpty(userReply))
+                                        break;
+                                    userInError = !short.TryParse(userReply, out short userShort);
+                                    while (userInError)
+                                    {
+                                        Console.WriteLine("That answer didn't make sense. Please try again.");
+                                        Console.WriteLine("What is the new size limit of this crate?");
+                                        Console.Write("===> ");
+                                        userReply = Console.ReadLine();
+                                        if (string.IsNullOrEmpty(userReply))
+                                        {
+                                            userInError = false;
+                                            userShort = 0;
+                                        }
+                                        else if (short.TryParse(userReply, out userShort))
+                                            userInError = false;
+                                    }
+                                    if (userShort == 0)
+                                        break;
+                                    if (OverflowFriendly && (userShort < thisCrate.Count))
+                                    {
+                                        Console.WriteLine("This is a friendly reminder your crate is now overflowing.");
+                                        Console.Write("Press Enter to continue.");
+                                        _ = Console.ReadLine();
+                                    }
+                                    else if (userShort < thisCrate.Count)
+                                    {
+                                        Console.WriteLine("Your crate is now overflowing. Do you want to make this ");
+                                        Console.Write("crate overflow friendly too (Y/n)?  ");
+                                        if (Console.ReadLine().ToLower().StartsWith("n"))
+                                        {
+                                            Console.WriteLine($"Returning the crate's maximum size to {MaxCrateSize}.");
+                                            Console.Write("Press Enter to continue.");
+                                        }
+                                        else
+                                        {
+                                            MaxCrateSize = userShort;
+                                            OverflowFriendly = true;
+                                            dirtyOpts = true;
+                                            Console.Write("Done. Press Enter to continue.");
+
+                                        }
+                                        _ = Console.ReadLine();
+                                    }
+                                    else
+                                    {
+                                        MaxCrateSize = userShort;
+                                        dirtyOpts = true;
+                                    }
+                                    break;
+                                case 3:
+                                    if (OverflowFriendly && (thisCrate.Count > MaxCrateSize))
+                                    {
+                                        Console.WriteLine("I'm unable to comply. The crate is already overflowing.");
+                                        Console.WriteLine("Please remove some items first then try again. Press Enter");
+                                        Console.Write("to continue.");
+                                        _ = Console.ReadLine();
+                                    }
+                                    else
+                                    {
+                                        OverflowFriendly = !OverflowFriendly;
+                                        dirtyOpts = true;
+                                    }
+                                    break;
+                                default:
+                                    UserError();
                                     break;
                             }
                         } while (!ExitOptionsMenu);
                         break;
                     default:
-                        Console.WriteLine("Sorry, I didn't recognize that choice.");
-                        Console.Write("Press Enter to try again.");
-                        _ = Console.ReadLine();
+                        UserError();
                         break;
                 } 
             } while (!ExitCrateProgram);
             return returnValue;
         }
+        private bool RemoveCharacter()
+        {
+            bool return_value;
+            List<string> charNames = charList.Select(p => p.name).ToList();
+            int remove_num = thisMenu.ThisMenu(charNames, true, "Current Characters");
+            if (remove_num < 0)
+                return_value = false;
+            else
+            {
+                charList.RemoveAt(remove_num);
+                return_value = true;
+            }
+            return return_value;
+        }
         /// <summary>
         /// This is run when user selects "I'm playing as..."
         /// </summary>
-        internal void RunPlayer()
+        private bool RemoveItem()
+        {
+            bool return_val;
+            int RemoveVal = ListItemsInCrate(true);
+            if (RemoveVal < 0)
+                return_val = false;
+            else
+            {
+                thisCrate.RemoveAt(RemoveVal);
+                return_val = true;
+            }
+            return return_val;
+        }
+        private void RunPlayer()
         {
             List<string> characterNames = charList.Select(p => p.name).ToList();
             int characterChoice;
+            long chosenCharacter;
+            Dictionary<long, List<long>> CanUse = new Dictionary<long, List<long>>();
+            List<long> CanNotUse = new List<long>();
             if (charList.Count == 0)
             {
                 Console.WriteLine("No characters currently exist to play as. Try adding some, then come back.");
@@ -432,16 +768,102 @@ namespace eq2crate
             else if (charList.Count == 1)
             {
                 characterChoice = 0;
+                chosenCharacter = charList[0].char_id;
             }
             else
             {
                 characterChoice = thisMenu.ThisMenu(characterNames, true, "Who are you playing as?");
                 if (characterChoice == -1)
                     return;
+                chosenCharacter = charList[characterChoice].char_id;
             }
-            Console.WriteLine("We're going to do some stuff here. You'll see!");
-            Console.Write("Press Enter to continue.");
+            foreach (RecipeBook thisItem in thisCrate)
+            {
+                foreach(Character thisChar in charList)
+                {
+                    if (thisItem.ClassIDs.ContainsKey(thisChar.ts_class) && (!thisChar.recipies.Contains(thisItem.RecipieList.First())))
+                    {
+                        if (!CanUse.ContainsKey(thisItem.ItemIDNum))
+                        {
+                            CanUse.Add(thisItem.ItemIDNum, new List<long>());
+                        }
+                        CanUse[thisItem.ItemIDNum].Add(thisChar.char_id);
+                    }
+                }
+                if (!CanUse.ContainsKey(thisItem.ItemIDNum))
+                    CanNotUse.Add(thisItem.ItemIDNum);
+            }
+            foreach (SpellScroll thisItem in thisCrate)
+            {
+                foreach (Character thisChar in charList)
+                {
+                    foreach (string thisClass in thisItem.ClassIDs.Keys)
+                    {
+                        if (Crate.adv_classes[thisClass] == thisChar.adv_class)
+                        {
+                            if (thisChar.crc_dict.ContainsKey(thisItem.SpellCRC) && (thisChar.crc_dict[thisItem.SpellCRC] < thisItem.ItemTier))
+                            {
+                                if (!CanUse.ContainsKey(thisItem.ItemIDNum))
+                                {
+                                    CanUse.Add(thisItem.ItemIDNum, new List<long>());
+                                }
+                                CanUse[thisItem.ItemIDNum].Add(thisChar.char_id);
+                            }
+                            else if (!thisChar.crc_dict.ContainsKey(thisItem.SpellCRC))
+                            {
+                                if (!CanUse.ContainsKey(thisItem.ItemIDNum))
+                                {
+                                    CanUse.Add(thisItem.ItemIDNum, new List<long>());
+                                }
+                                CanUse[thisItem.ItemIDNum].Add(thisChar.char_id);
+                            }
+                        }
+                    }
+                }
+                if (!CanUse.ContainsKey(thisItem.ItemIDNum))
+                    CanNotUse.Add(thisItem.ItemIDNum);
+            }
+            if (CanUse.Count + CanNotUse.Count == thisCrate.Count)
+                Console.WriteLine("Sanity check point 1 cleared.");
+            else
+            {
+                Console.WriteLine($"{CanUse.Count} + {CanNotUse.Count} != {thisCrate.Count}");
+                Console.Write("Sanity check fails. Press Enter to continue.");
+                _ = Console.ReadLine();
+            }
             _ = Console.ReadLine();
+        }
+        /// <summary>
+        /// Saves data in CharList to the temporary Character.bin file.
+        /// </summary>
+        /// <returns>Any non-zero value indicates an error.</returns>
+        private int SaveChar()
+        {
+            if (charList.Count > 0)
+            {
+                FileStream fileStream = File.OpenWrite(TempChars);
+                binaryFormatter.Serialize(fileStream, charList);
+                fileStream.Flush();
+                fileStream.Close();
+                fileStream.Dispose();
+            }
+            else
+                File.OpenWrite(TempChars).Close();
+            return 0;
+        }
+        private int SaveCrate()
+        {
+            if (thisCrate.Count > 0)
+            {
+                FileStream fileStream = File.OpenWrite(TempCrate);
+                binaryFormatter.Serialize(fileStream, thisCrate);
+                fileStream.Flush();
+                fileStream.Close();
+                fileStream.Dispose();
+            }
+            else
+                File.OpenWrite(TempCrate).Close();
+            return 0;
         }
         /// <summary>
         /// Saves data in memory to temp files or moves temp files back into the active directory.
@@ -465,9 +887,54 @@ namespace eq2crate
             if (CleanSave)
             {
                 _ = SaveData();
-                File.Move(TempOpts, OptsFile);
-                File.Move(TempChars, CharFile);
-                File.Move(TempCrate, ItemFile);
+                if (dirtyOpts)
+                {
+                    if (File.Exists(OptsBak))
+                        File.Delete(OptsBak);
+                    if (File.Exists(OptsFile))
+                        File.Move(OptsFile, OptsBak);
+                    File.Move(TempOpts, OptsFile);
+                }
+                else
+                    File.Delete(TempOpts);
+                if (dirtyCharacters && (charList.Count > 0))
+                {
+                    if (File.Exists(CharBak))
+                        File.Delete(CharBak);
+                    if (File.Exists(CharFile))
+                        File.Move(CharFile, CharBak);
+                    File.Move(TempChars, CharFile);
+                }
+                else if (dirtyCharacters && (charList.Count == 0))
+                {
+                    if (File.Exists(CharBak))
+                        File.Delete(CharBak);
+                    if (File.Exists(CharFile))
+                        File.Move(CharFile, CharBak);
+                    File.Delete(TempChars);
+                    File.OpenWrite(CharFile).Close();
+                }
+                else
+                    File.Delete(TempChars);
+                if (dirtyCrate && (thisCrate.Count > 0))
+                {
+                    if (File.Exists(ItemBak))
+                        File.Delete(ItemBak);
+                    if (File.Exists(ItemFile))
+                        File.Move(ItemFile, ItemBak);
+                    File.Move(TempCrate, ItemFile);
+                }
+                else if (dirtyCrate && (thisCrate.Count == 0))
+                {
+                    if (File.Exists(ItemBak))
+                        File.Delete(ItemBak);
+                    if (File.Exists(ItemFile))
+                        File.Move(ItemFile, ItemBak);
+                    File.Delete(TempCrate);
+                    File.OpenWrite(ItemFile).Close();
+                }
+                else
+                    File.Delete(TempCrate);
                 dirtyCrate = false;
                 dirtyCharacters = false;
                 dirtyOpts = false;
@@ -483,40 +950,13 @@ namespace eq2crate
             }
             return return_val;
         }
-        /// <summary>
-        /// Saves data in CharList to the temporary Character.bin file.
-        /// </summary>
-        /// <returns>Any non-zero value indicates an error.</returns>
-        internal int SaveChar()
-        {
-            BinaryWriter CharWriter = new BinaryWriter(File.OpenWrite(TempChars));
-            foreach (Character thisChar in charList)
-            {
-                CharWriter.Write(thisChar.char_id);
-            }
-            CharWriter.Flush();
-            CharWriter.Close();
-            CharWriter.Dispose();
-            return 0;
-        }
-        internal int SaveCrate()
-        {
-            BinaryWriter CrateWriter = new BinaryWriter(File.OpenWrite(TempCrate));
-            foreach (CrateItem thisItem in thisCrate)
-            {
-                CrateWriter.Write(thisItem.ItemIDNum);
-                CrateWriter.Write(thisItem.ItemQuantity);
-            }
-            CrateWriter.Flush();
-            CrateWriter.Close();
-            CrateWriter.Dispose();
-            return 0;
-        }
-        internal int SaveOpts()
+        private int SaveOpts()
         {
             BinaryWriter OptionsWriter = new BinaryWriter(File.OpenWrite(TempOpts));
             OptionsWriter.Write(goOnline);
             OptionsWriter.Write(heirloomFriendly);
+            OptionsWriter.Write(MaxCrateSize);
+            OptionsWriter.Write(OverflowFriendly);
             OptionsWriter.Flush();
             OptionsWriter.Close();
             OptionsWriter.Dispose();
@@ -525,7 +965,7 @@ namespace eq2crate
         /// <summary>
         /// The user did something outside the bounds. Say so and continue.
         /// </summary>
-        internal void UserError()
+        private void UserError()
         {
             Console.WriteLine("I didn't understand that choice.");
             Console.Write("Press Enter to try again.");
@@ -614,206 +1054,5 @@ namespace eq2crate
                 Console.WriteLine("False");
             _ = Console.ReadLine();
         } */
-        /// <summary>
-        /// Attempts to add an item to the crate by querying the user for identifying details.
-        /// </summary>
-        /// <returns>
-        ///     <list type="bullet">
-        ///         <item>
-        ///             <term>True</term>
-        ///             <description>An item was successfully added.</description>
-        ///         </item>
-        ///         <item>
-        ///             <term>False</term>
-        ///             <description>No item was added.</description>
-        ///         </item>
-        ///     </list>
-        /// </returns>
-        internal bool AddItemToCrate()
-        {
-            bool returnValue = false;
-            CrateItem newItem;
-            Console.WriteLine("Do you have the Daybreak item ID number? (y/N)");
-            Console.Write("==> ");
-            if (Console.ReadLine().ToLower().StartsWith("y"))
-            {
-                long UserLong;
-                Console.WriteLine("Please enter the Daybreak item ID number.");
-                Console.Write("==> ");
-                while ((!long.TryParse(Console.ReadLine(), out UserLong)) || (UserLong < 0))
-                {
-                    Console.Write("That was not a valid value. Please enter the Daybreak ID number of the item or '0' to cancel.");
-                    Console.Write("==> ");
-                }
-                if (UserLong == 0)
-                    return returnValue;
-                newItem = thisCrate.GetItemFromID(UserLong);
-            }
-            else
-            {
-                Console.WriteLine("Please enter the name of the item you would like to add.");
-                Console.Write("==> ");
-                newItem = thisCrate.GetItemFromName(Console.ReadLine());
-            }
-            if (newItem.IsLore)
-            {
-                Console.WriteLine("This item is LORE flagged. Quantity automagically set to 1. Press Enter to continue.");
-                _ = Console.ReadLine();
-                newItem.ItemQuantity = 1;
-            }
-            else
-            {
-                short newQuantity;
-                Console.WriteLine($"How many copies of {newItem.ItemName} do you want to add?");
-                Console.Write("==> ");
-                while ((!short.TryParse(Console.ReadLine(), out newQuantity)) || (newQuantity < 1))
-                {
-                    Console.WriteLine("That was an invalid number.");
-                    Console.WriteLine($"How many copies of {newItem.ItemName} do you want to add?");
-                    Console.Write("==> ");
-                }
-                if (newQuantity == 0)
-                    return returnValue;
-                newItem.ItemQuantity = newQuantity;
-            }
-            if (heirloomFriendly)
-            { }
-            else if (newItem.IsHeirloom)
-            {
-                Console.WriteLine("This crate does not accept HEIRLOOM flagged items.");
-                returnValue = false;
-            }
-            else
-            {
-                thisCrate.Add(newItem);
-                if (SaveCrate() != 0)
-                    throw new Exception();
-                returnValue = true;
-                thisCrate.Sort();
-            }
-            return returnValue;
-        }
-        internal bool RemoveItem()
-        {
-            bool return_val;
-            int RemoveVal = ListItemsInCrate(true);
-            if (RemoveVal < 0)
-                return_val = false;
-            else
-            {
-                thisCrate.RemoveAt(RemoveVal);
-                return_val = true;
-            }
-            return return_val;
-        }
-        internal bool AddCharacter()
-        {
-            bool return_val;
-            Console.Write("Do you have the Daybreak ID number of the character you want to add (y/N)?  ");
-            if (Console.ReadLine().ToLower().StartsWith("y"))
-            {
-                Console.Write("Please enter the Daybreak ID number of the character you want to add.  ");
-                if (long.TryParse(Console.ReadLine(), out long new_char_num))
-                {
-                    charList.Add(new Character(new_char_num));
-                }
-                return_val = true;
-            }
-            else
-            {
-                Console.WriteLine("Please enter the name of the character. Remember: Capitolization and spelling count!");
-                Console.Write("==>  ");
-                string get_url = string.Concat(urlBase, urlCharCount, urlNameGet, Console.ReadLine());
-                XDocument BasicXML = GetThisUrl(get_url), MiscXML;
-                if (!int.TryParse(BasicXML.Element("character_list").Attribute("returned").Value, out int returned_chars))
-                {
-                    Console.WriteLine("Unable to determine how many characters were returned. Abending.");
-                    throw new Exception();
-                }
-                switch (returned_chars)
-                {
-                    case 0:
-                        Console.Write("No characters with the given name were found. Press Enter to continue.");
-                        _ = Console.ReadLine();
-                        return_val = false;
-                        break;
-                    case 1:
-                        get_url = string.Concat(urlBase, urlCharMisc, urlIDGet, BasicXML.Element("character_list").Element("character").Attribute("id").Value);
-                        MiscXML = GetThisUrl(get_url);
-                        charList.Add(new Character(BasicXML.Element("character_list"), MiscXML.Element("character_misc_list")));
-                        return_val = true;
-                        break;
-                    default:
-                        Console.WriteLine("Too many characters were returned. This will be coded later.");
-                        Console.Write("Press Enter to continue.");
-                        _ = Console.ReadLine();
-                        return_val = false;
-                        break;
-                }
-            }
-            if (return_val)
-            {
-                charList.Sort();
-            }
-            return return_val;
-        }
-        /// <summary>
-        /// Lists the items in the crate by name. The <paramref name="NeedReturnVal"/> is passed to the Menu call.
-        /// </summary>
-        /// <param name="NeedReturnVal">Do you need to know what the user selected?</param>
-        /// <returns>Menu returned int value.</returns>
-        internal int ListItemsInCrate(bool NeedReturnVal = false)
-        {
-            List<string> crate_items = thisCrate.Select(item => item.ItemName).ToList();
-            return thisMenu.ThisMenu(crate_items, NeedReturnVal, "Current items");
-        }
-        /// <summary>
-        /// Attempts to add an item to the crate by querying the user for identifying details.
-        /// </summary>
-        /// <returns>
-        ///     <list type="bullet">
-        ///         <item>
-        ///             <term>True</term>
-        ///             <description>An item was successfully added.</description>
-        ///         </item>
-        ///         <item>
-        ///             <term>False</term>
-        ///             <description>No item was added.</description>
-        ///         </item>
-        ///     </list>
-        /// </returns>
-        public static XDocument GetThisUrl(string get_url)
-        {
-            XDocument return_val;
-            int err_count = 0;
-            Task<string> raw_xml = httpClient.GetStringAsync(get_url);
-            raw_xml.Wait();
-            while (raw_xml.IsFaulted && (err_count < 3))
-            {
-                Thread.Sleep(3000);
-                err_count++;
-                raw_xml = httpClient.GetStringAsync(get_url);
-                raw_xml.Wait();
-            }
-            if (err_count >= 3)
-                throw raw_xml.Exception;
-            return_val = XDocument.Parse(raw_xml.Result);
-            return return_val;
-        }
-        internal bool RemoveCharacter()
-        {
-            bool return_value;
-            List<string> charNames = charList.Select(p => p.name).ToList();
-            int remove_num = thisMenu.ThisMenu(charNames, true, "Current Characters");
-            if (remove_num < 0)
-                return_value = false;
-            else
-            {
-                charList.RemoveAt(remove_num);
-                return_value = true;
-            }
-            return return_value;
-        }
-
     }
 }

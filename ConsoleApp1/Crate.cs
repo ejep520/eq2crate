@@ -5,13 +5,14 @@ using System.Xml.Linq;
 
 namespace eq2crate
 {
+    [Serializable]
     public class Crate : List<CrateItem>
     {
         private readonly string urlBase = RunCrate.urlBase;
+        private readonly string urlIDGet = RunCrate.urlIDGet;
+        private readonly string urlNameGet = RunCrate.urlNameGet;
         private const string urlConstants = @"constants/?c:show=maxtradeskilllevel,maxadventurelevel";
-        private const string urlItemId = @"item/?c:limit=10&c:show=typeid,typeinfo,description,tierid,displayname,itemlevel,requiredskill,flags.heirloom,flags.lore&id=";
-        private const string urlItemName = @"item/?c:limit=10&c:show=typeid,typeinfo,description,tierid,displayname,itemlevel,requiredskill,flags.heirloom,flags.lore&displayname_lower=";
-        private const string urlSpell = @"spell/?c:show=crc,tier&id=";
+        private const string urlItem = @"item/?c:limit=10&c:show=typeid,typeinfo,description,tierid,displayname,itemlevel,requiredskill,flags.heirloom,flags.lore";
         public static readonly Dictionary<string, short> adv_classes = new Dictionary<string, short>
             {
             ["Guardian"] = 3,
@@ -77,7 +78,7 @@ namespace eq2crate
         public CrateItem GetItemFromID(long GetIDNum)
         {
             CrateItem ReturnVal = new CrateItem();
-            string NewReq = string.Concat(urlBase, urlItemId, GetIDNum.ToString());
+            string NewReq = string.Concat(urlBase, urlItem, urlIDGet, GetIDNum.ToString());
             XDocument BasicXML = RunCrate.GetThisUrl(NewReq);
             string returnedNum = BasicXML.Element("item_list").Attribute("returned").Value;
             if (short.TryParse(returnedNum, out short ReturnedItems))
@@ -158,7 +159,7 @@ namespace eq2crate
             Dictionary<string, int> ClassDict = new Dictionary<string, int>();
             foreach (XElement MaybeClassNode in TypeInfoElement.Element("classes").Elements())
             {
-                ClassDict[MaybeClassNode.Attribute("displayname").Value] = int.Parse(MaybeClassNode.
+                ClassDict[MaybeClassNode.Attribute("displayname").Value.ToLower()] = int.Parse(MaybeClassNode.
                     Attribute("level").Value);
             }
             if (ClassDict.Count == 0)
@@ -205,7 +206,7 @@ namespace eq2crate
         public CrateItem GetItemFromName(string search_key)
         {
             CrateItem return_val;
-            string search_url = string.Concat(urlBase, urlItemName, search_key.ToLower());
+            string search_url = string.Concat(urlBase, urlItem, urlNameGet, search_key.ToLower());
             XDocument new_xml = RunCrate.GetThisUrl(search_url);
             int returned_num = int.Parse(new_xml.Element("item_list").Attribute("returned").Value);
             switch (returned_num)

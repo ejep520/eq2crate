@@ -5,6 +5,7 @@ using System.Text;
 
 namespace eq2crate
 {
+    [Serializable]
     class SpellScroll:CrateItem
     {
         public new const short ItemType = 6;
