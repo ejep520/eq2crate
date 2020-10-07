@@ -1,6 +1,9 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using System.Xml.Linq;
 
 namespace eq2crate
@@ -106,11 +109,13 @@ namespace eq2crate
                     case 3:
                         Console.Write("Please wait while we assemble this menu. Just a moment...");
                         menu_items.Clear();
-                        foreach (long ThisRec in RecipieList)
+                        ConcurrentBag<string> ConStrings = new ConcurrentBag<string>();
+                        _ = Parallel.ForEach(RecipieList, (ThisRec) =>
                         {
                             XDocument thisRecipe = RunCrate.GetThisUrl(string.Concat(recipeURL, ThisRec.ToString()));
-                            menu_items.Add(thisRecipe.Element("recipe_list").Element("recipe").Attribute("name").Value);
-                        }
+                            ConStrings.Add(thisRecipe.Element("recipe_list").Element("recipe").Attribute("name").Value);
+                        });
+                        menu_items = ConStrings.ToList();
                         _ = EditMenu.ThisMenu(menu_items, false, $"{ItemName}'s Recipe List");
 
                         break;

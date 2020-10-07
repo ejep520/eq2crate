@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Linq;
+using System.Net.Http;
+using System.Threading.Tasks;
 using System.Xml.Linq;
 
 namespace eq2crate
@@ -13,6 +16,7 @@ namespace eq2crate
         public long char_id;
         public List<long> recipies, spells;
         public readonly Dictionary<long, short> crc_dict = new Dictionary<long, short>();
+        private readonly ConcurrentDictionary<long, short> temp_crc_dict = new ConcurrentDictionary<long, short>();
         /// <summary>
         /// This is a do-nothing constructor with default values. Just don't use it. Please.
         /// </summary>
@@ -90,7 +94,7 @@ namespace eq2crate
         ///         </item>
         ///     </list>
         /// </returns>
-        public bool UpdateCharacter()
+        public bool UpdateCharacter(HttpClient thisClient)
         {
             bool returnValue = false;
             Character tempChar = new Character(char_id);
@@ -291,42 +295,48 @@ namespace eq2crate
                 IsErrored = true;
                 recipies = new List<long>();
             }
-            foreach (long thisSpell in spells)
+            if (spells.Count > 0)
             {
-                long spell_crc;
-                short spell_tier;
-                XDocument SpellRaw = RunCrate.GetThisUrl(string.Concat(RunCrate.urlSpell, RunCrate.urlIDGet, thisSpell.ToString()));
-                XElement SpellCooked = SpellRaw.Element("spell_list");
-                switch (int.Parse(SpellCooked.Attribute("returned").Value))
+                temp_crc_dict.Clear();
+                _ = Parallel.ForEach(spells, (thisSpell) =>
                 {
-                    case 0:
-                        break;
-                    case 1:
-                        spell_crc = long.Parse(SpellCooked.Element("spell").Attribute("crc").Value);
-                        spell_tier = short.Parse(SpellCooked.Element("spell").Attribute("tier").Value);
-                        if (crc_dict.ContainsKey(spell_crc))
-                        {
-
-                            Console.WriteLine($"{name} has two spells with the crc {spell_crc}.");
+                    long spell_crc;
+                    short spell_tier;
+                    XDocument SpellRaw = RunCrate.GetThisUrl(string.Concat(RunCrate.urlSpell, RunCrate.urlIDGet, thisSpell.ToString()));
+                    XElement SpellCooked = SpellRaw.Element("spell_list");
+                    switch (int.Parse(SpellCooked.Attribute("returned").Value))
+                    {
+                        case 0:
+                            break;
+                        case 1:
+                            spell_crc = long.Parse(SpellCooked.Element("spell").Attribute("crc").Value);
+                            spell_tier = short.Parse(SpellCooked.Element("spell").Attribute("tier").Value);
+                            if (temp_crc_dict.ContainsKey(spell_crc))
+                            {
+                                Console.WriteLine($"This character has two spells with the crc {spell_crc}.");
+                            }
+                            else
+                            {
+                                if (!temp_crc_dict.TryAdd(spell_crc, spell_tier))
+                                {
+                                    Console.WriteLine($"Unable to add {spell_crc}. The key already existed.");
+                                    IsErrored = true;
+                                }
+                            }
+                            break;
+                        default:
+                            Console.WriteLine($"Found too many spells based on ID {thisSpell}.");
                             IsErrored = true;
-                        }
-                        else
-                        {
-                            crc_dict.Add(spell_crc, spell_tier);
-                        }
-                        break;
-                    default:
-                        Console.WriteLine($"Found too many spells based on ID {thisSpell}.");
-                        IsErrored = true;
-                        break;
-                }
+                            break;
+                    }
+                });
             }
-
-            if (spells.Count >= crc_dict.Count)
-            { }
-            else
+            crc_dict.Clear();
+            foreach (KeyValuePair<long, short> thisPair in temp_crc_dict)
+                crc_dict.Add(thisPair.Key, thisPair.Value);
+            if (spells.Count < crc_dict.Count)
             {
-                Console.WriteLine("The number of spells does not equal the number of crc dictionary entries.");
+                Console.WriteLine("The number of spells is greater than the number of crc dictionary entries.");
                 Console.WriteLine("Sanity check fails.");
                 IsErrored = true;
             }

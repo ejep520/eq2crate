@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
+using System.Xml.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace eq2crate.CrateTests
@@ -80,6 +82,49 @@ namespace eq2crate.CrateTests
         {
             Character TestChar = new Character(433792994743);
             Assert.IsTrue(TestChar.spells.Contains(389401816));
+        }
+        [TestMethod]
+        public void ThreadedOK()
+        {
+            Character TestChar = new Character(433792994743);
+            Dictionary<long, short> testDict = new Dictionary<long, short>();
+            foreach (long thisSpell in TestChar.spells)
+            {
+                long spell_crc;
+                short spell_tier;
+                XDocument rawSpell = RunCrate.GetThisUrl(string.Concat(RunCrate.urlSpell, RunCrate.urlIDGet, thisSpell.ToString()));
+                XElement SpellCooked = rawSpell.Element("spell_list");
+                switch (int.Parse(SpellCooked.Attribute("returned").Value))
+                {
+                    case 0:
+                        break;
+                    case 1:
+                        spell_crc = long.Parse(SpellCooked.Element("spell").Attribute("crc").Value);
+                        spell_tier = short.Parse(SpellCooked.Element("spell").Attribute("tier").Value);
+                        if (testDict.ContainsKey(spell_crc))
+                        {
+                            Console.WriteLine($"This character has two spells with the crc {spell_crc}.");
+                        }
+                        else
+                        {
+                            testDict.Add(spell_crc, spell_tier);
+                        }
+                        break;
+                    default:
+                        Console.WriteLine($"Found too many spells based on ID {thisSpell}.");
+                        break;
+                }
+            }
+            foreach (KeyValuePair<long, short> thisPair in testDict)
+            {
+                if (TestChar.crc_dict.ContainsKey(thisPair.Key) && (TestChar.crc_dict[thisPair.Key] == thisPair.Value))
+                { }
+                else if (!TestChar.crc_dict.ContainsKey(thisPair.Key))
+                    Assert.Fail($"Spell CRC {thisPair.Key} did not make it into the dictionary.");
+                else
+                    Assert.Fail($"Spell CRC {thisPair.Key} had a different tiers!");
+            }
+            Assert.IsTrue(true);
         }
     }
 }

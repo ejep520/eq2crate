@@ -745,7 +745,7 @@ namespace eq2crate
                                         menu_choices.AddRange(charList.Select(p => p.name));
                                         int chosenChar = thisMenu.ThisMenu(menu_choices, true, "Current characters");
                                         if (chosenChar >= 0)
-                                            dirtyCharacters = charList[chosenChar].UpdateCharacter() || dirtyCharacters;
+                                            dirtyCharacters = charList[chosenChar].UpdateCharacter(httpClient) || dirtyCharacters;
                                     }
                                     else
                                         UserError();
@@ -757,7 +757,7 @@ namespace eq2crate
                                         for (int counter = 0; counter < charList.Count; counter++)
                                         {
                                             Console.WriteLine($"Updating {charList[counter].name}...");
-                                            dirtyCharacters = charList[counter].UpdateCharacter() || dirtyCharacters;
+                                            dirtyCharacters = charList[counter].UpdateCharacter(httpClient) || dirtyCharacters;
                                         }
                                         Console.WriteLine("Finished.");
                                         Pe2c();
