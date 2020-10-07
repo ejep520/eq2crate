@@ -13,7 +13,7 @@ namespace eq2crate
         private const string PrevPage = "Prev Page";
         private const string AsciiCorner = "+";
         private const string DefaultFooter = "Press Enter to continue";
-        private const string UserPrompt = "===> ";
+        private readonly string UserPrompt = RunCrate.userPrompt;
         private const char PrevChar = '[';
         private const char NextChar = ']';
         private const string NextNext = "]]";
@@ -31,16 +31,19 @@ namespace eq2crate
         private int MaxWide, MaxLong, TotalItems;
         public Menu()
         { }
-        public int ThisMenu(List<string> MenuItems, bool ReturnResponse, string Title=null)
+        ~Menu() { }
+        public int ThisMenu(List<string> MenuItems, bool ReturnResponse, string Title="")
         {
-            int pagesNeeded;
-            string Footer = string.Empty;
+            bool EndMenu = false;
+            int UserInt = -1, pagesNeeded, CurrentPage = 0;
+            char UserChar;
+            string Footer = string.Empty, UserInput;
             List<string>[] Pages;
             if (ReturnResponse)
                 MenuItems.Insert(0, "Cancel");
             else
                 Footer = DefaultFooter;
-            FindSize(MenuItems, Title);
+            FindSize(MenuItems, Title, Footer);
             bool multipage = MenuItems.Count > MaxLong;
             if (multipage)
             {
@@ -93,20 +96,16 @@ namespace eq2crate
                 else
                     MenuItems[counter] = $"xx. {MenuItems[counter]}";
             }
-            MenuItems = FixOverlong(MenuItems);
-            pagesNeeded = (MenuItems.Count() / MaxLong) + 1;
+            ModdedMenu.Clear();
+            ModdedMenu.AddRange(FixOverlong(MenuItems));
+            pagesNeeded = (ModdedMenu.Count() / MaxLong) + 1;
             Pages = new List<string>[pagesNeeded];
-            for (int counter = 0; counter < MenuItems.Count; counter++)
+            for (int counter = 0; counter < ModdedMenu.Count; counter++)
             {
                 if (counter % MaxLong == 0)
                     Pages[counter / MaxLong] = new List<string>();
-                Pages[counter / MaxLong].Add(MenuItems[counter]);
+                Pages[counter / MaxLong].Add(ModdedMenu[counter]);
             }
-            bool EndMenu = false;
-            int CurrentPage = 0;
-            string UserInput;
-            int UserInt = -1;
-            char UserChar;
             do
             {
                 Console.Clear();
@@ -185,7 +184,7 @@ namespace eq2crate
             }while (!EndMenu);
             return UserInt;
         }
-        internal void PrintCurrentPage(List<string> CurrentPage)
+        private void PrintCurrentPage(List<string> CurrentPage)
         {
             foreach (string MenuEntry in CurrentPage)
             {
@@ -195,7 +194,7 @@ namespace eq2crate
                 Console.Write("|\n".PadLeft(PadNeeded));
             }
         }
-        internal void PrintHeadFoot(string Title)
+        private void PrintHeadFoot(string Title)
         {
             if (string.IsNullOrEmpty(Title))
             {
@@ -213,18 +212,10 @@ namespace eq2crate
                 Console.WriteLine(sb.ToString());
             }
         }
-/*
-        internal int GetLongestStringLength(List<string> MenuItems)
-        {
-            int[] Lengths = new int[MenuItems.Count];
-            for (int counter = 0; counter < MenuItems.Count; counter++)
-                Lengths[counter] = MenuItems[counter].Length;
-            return Lengths.Max();
-        }
-*/
-        internal List<string> FixOverlong(List<string> MenuItems)
+        private List<string> FixOverlong(List<string> MenuItems)
         {
             List<int> Overlongs = new List<int>();
+            List<string> ReturnValue = new List<string>();
             for (int counter = 0; counter < MenuItems.Count; counter++)
             {
                 if (MenuItems[counter].Length > MaxWide)
@@ -232,61 +223,72 @@ namespace eq2crate
             }
             if (Overlongs.Count == 0)
                 return MenuItems;
-            for (int counter = Overlongs.Count - 1; counter >= 0; counter--)
+            if (MenuItems.Count == 0)
+                return MenuItems;
+            for (int counter = 0; counter < MenuItems.Count; counter++)
             {
-                int WordCounter = 0;
-                int LengthRemaining;
-                int LinesNeeded = (MenuItems[Overlongs[counter]].Length / MaxWide) + 1;
-                StringBuilder NewMenuItem = new StringBuilder();
-                string[] MenuItemBreakup = MenuItems[Overlongs[counter]].Split(' ');
-                for (int InnerCounter = 0; InnerCounter < LinesNeeded; InnerCounter++)
+                if (Overlongs.Contains(counter))
                 {
-                    LengthRemaining = MaxWide;
-                    if (InnerCounter > 0)
+                    int WordCounter = 0;
+                    int LengthRemaining;
+                    int LinesNeeded = (MenuItems[Overlongs[counter]].Length / MaxWide) + 1;
+                    StringBuilder NewMenuItem = new StringBuilder();
+                    string[] MenuItemBreakup = MenuItems[Overlongs[counter]].Split(' ');
+                    for (int InnerCounter = 0; InnerCounter < LinesNeeded; InnerCounter++)
                     {
-                        string CurrentLine = NewMenuItem.ToString().Trim();
-                        NewMenuItem.Clear();
-                        NewMenuItem.Append(CurrentLine);
-                        _ = NewMenuItem.Append("\n|     ");
-                        LengthRemaining -= 4;
+                        LengthRemaining = MaxWide;
+                        bool fallout = false;
+                        if (InnerCounter > 0)
+                        {
+                            string CurrentLine = NewMenuItem.ToString().Trim();
+                            NewMenuItem.Clear();
+                            NewMenuItem.Append(CurrentLine);
+                            _ = NewMenuItem.Append("\n|     ");
+                            LengthRemaining -= 4;
+                        }
+                        while (!fallout)
+                        {
+                            if (LengthRemaining > MenuItemBreakup[WordCounter].Length)
+                            {
+                                _ = NewMenuItem.Append(MenuItemBreakup[WordCounter]);
+                                LengthRemaining -= MenuItemBreakup[WordCounter].Length;
+                                WordCounter++;
+                            }
+                            else
+                            {
+                                _ = NewMenuItem.Append("|".PadLeft(LengthRemaining));
+                                fallout = true;
+                                continue;
+                            }
+                            if (WordCounter >= MenuItemBreakup.Length)
+                            {
+                                fallout = true;
+                                continue;
+                            }
+                            if ((LengthRemaining - 1) <= MenuItemBreakup[WordCounter].Length)
+                            {
+                                _ = NewMenuItem.Append("|".PadLeft(LengthRemaining));
+                                fallout = true;
+                                continue;
+                            }
+                            _ = NewMenuItem.Append(" ");
+                            LengthRemaining--;
+                        }
                     }
-                    while (true)
-                    {
-                        if (LengthRemaining > MenuItemBreakup[WordCounter].Length)
-                        {
-                            _ = NewMenuItem.Append(MenuItemBreakup[WordCounter]);
-                            LengthRemaining -= MenuItemBreakup[WordCounter].Length;
-                            WordCounter++;
-                        }
-                        else
-                        {
-                            _ = NewMenuItem.Append("|".PadLeft(LengthRemaining));
-                            break;
-                        }
-                        if (WordCounter >= MenuItemBreakup.Length)
-                            break;
-                        if ((LengthRemaining - 1) <= MenuItemBreakup[WordCounter].Length)
-                        {
-                            _ = NewMenuItem.Append("|".PadLeft(LengthRemaining));
-                            break;
-                        }
-                        _ = NewMenuItem.Append(" ");
-                        LengthRemaining--;
-                    }
+                    ReturnValue.Insert(0, NewMenuItem.ToString());
                 }
-                MenuItems[Overlongs[counter]] = NewMenuItem.ToString();
+                else
+                    ReturnValue.Insert(0, MenuItems[counter]);
             }
-            return MenuItems;
+            return ReturnValue;
         }
-        internal void FindSize(List<string> MenuItems, string Title)
+        private void FindSize(List<string> MenuItems, string Title, string Footer)
         {
             double paddings;
             MaxLong = Console.WindowHeight - 5; // (Top & bottom borders, top & bottom margins, and prompt)
             int WidestOption = MenuItems.Select(p => p.Length).Max() + 1;
-            if ((Title == null) || (WidestOption > Title.Length))
-                MaxWide = WidestOption;
-            else
-                MaxWide = Title.Length;
+            int[] WideMaybes = { WidestOption, Title.Length, Footer.Length };
+            MaxWide = WideMaybes.Max();
             paddings = Math.Ceiling(Math.Log10(MenuItems.Count));
             string PaddingZeroBuilder = "", PaddingSpaceBuilder = "";
             for (int counter = 0; counter < paddings; counter++)

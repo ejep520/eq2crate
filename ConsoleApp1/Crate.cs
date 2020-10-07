@@ -6,64 +6,22 @@ using System.Xml.Linq;
 namespace eq2crate
 {
     [Serializable]
-    public class Crate : List<CrateItem>
+    public class Crate : List<CrateItem>, ICloneable
     {
-        private readonly string urlBase = RunCrate.urlBase;
         private readonly string urlIDGet = RunCrate.urlIDGet;
-        private readonly string urlNameGet = RunCrate.urlNameGet;
-        private const string urlConstants = @"constants/?c:show=maxtradeskilllevel,maxadventurelevel";
+        private const string urlNameGet = @"&displayname_lower=^";
+        private const string urlConstants = @"constants/?c:show=maxtradeskilllevel,maxadventurelevel,adventureclass_list,tradeskillclass_list";
         private const string urlItem = @"item/?c:limit=10&c:show=typeid,typeinfo,description,tierid,displayname,itemlevel,requiredskill,flags.heirloom,flags.lore";
-        public static readonly Dictionary<string, short> adv_classes = new Dictionary<string, short>
-            {
-            ["Guardian"] = 3,
-            ["Berserker"] = 4,
-            ["Monk"] = 6,
-            ["Bruiser"] = 7,
-            ["Shadowknight"] = 9,
-            ["Paladin"] = 10,
-            ["Templar"] = 13,
-            ["Inquisitor"] = 14,
-            ["Warden"] = 16,
-            ["Fury"] = 17,
-            ["Mystic"] = 19,
-            ["Defiler"] = 20,
-            ["Wizard"] = 23,
-            ["Warlock"] = 24,
-            ["Illusionist"] = 26,
-            ["Coercer"] = 27,
-            ["Conjuror"] = 29,
-            ["Necromancer"] = 30,
-            ["Swashbuckler"] = 33,
-            ["Brigand"] = 34,
-            ["Troubador"] = 36,
-            ["Dirge"] = 37,
-            ["Ranger"] = 39,
-            ["Assassin"] = 40,
-            ["Beastlord"] = 42,
-            ["Channeler"] = 44
-            };
-        public static readonly Dictionary<string, short> ts_classes = new Dictionary<string, short>
-        {
-            ["woodworker"] = 2,
-            ["carpenter"] = 3,
-            ["armorer"] = 4,
-            ["weaponsmith"] = 5,
-            ["tailor"] = 6,
-            ["jeweler"] = 7,
-            ["sage"] = 8,
-            ["alchemist"] = 9
-        };
+        public static readonly Dictionary<short, string> adv_classes = new Dictionary<short, string>();
+        public static readonly Dictionary<string, short> rev_adv_classes = new Dictionary<string, short>();
+        public static readonly Dictionary<string, short> ts_classes = new Dictionary<string, short>();
         public short max_ts_lvl, max_adv_lvl;
-        /// <summary>
-        /// This is the default constructor for this class. It always goes out and finds the constants for the game on creation.
-        /// </summary>
+        /// <summary>This is the default constructor for this class. It always goes out and finds the constants for the game on creation.</summary>
         public Crate()
         {
             GetConstants();
         }
-        /// <summary>
-        /// This constructor looks to <paramref name="GetConstants"/> to decide if it should get the constants on creation or not.
-        /// </summary>
+        /// <summary>This constructor looks to <paramref name="GetConstants"/> to decide if it should get the constants on creation or not.</summary>
         /// <param name="GetConstants">Determines whether to use real constants or <see cref="short.MaxValue"/> for the max level values.</param>
         public Crate(bool GetConstants)
         {
@@ -75,10 +33,21 @@ namespace eq2crate
                 max_ts_lvl = short.MaxValue;
             }
         }
+        /// <summary>This constructor is called by the <see cref="Clone"/> method.</summary>
+        /// <param name="new_adv">The max adv level of the new, cloned crate.</param>
+        /// <param name="new_ts">The max ts level of the new, cloned crate.</param>
+        private Crate(short new_adv, short new_ts)
+        {
+            max_adv_lvl = new_adv;
+            max_ts_lvl = new_ts;
+        }
+        /// <summary>Creates a new <see cref="CrateItem"/> based on <paramref name="GetIDNum"/>.</summary>
+        /// <param name="GetIDNum">This is the Daybreak Games ID number of the item being created.</param>
+        /// <returns>A new instance of <see cref="CrateItem"/> based on the <paramref name="GetIDNum"/> <see cref="long"/> retrieved from Daybreak Games.</returns>
         public CrateItem GetItemFromID(long GetIDNum)
         {
             CrateItem ReturnVal = new CrateItem();
-            string NewReq = string.Concat(urlBase, urlItem, urlIDGet, GetIDNum.ToString());
+            string NewReq = string.Concat(urlItem, urlIDGet, GetIDNum.ToString());
             XDocument BasicXML = RunCrate.GetThisUrl(NewReq);
             string returnedNum = BasicXML.Element("item_list").Attribute("returned").Value;
             if (short.TryParse(returnedNum, out short ReturnedItems))
@@ -110,6 +79,9 @@ namespace eq2crate
             }
             return ReturnVal;
         }
+        /// <summary>Finds instances where ASCII text has been replaced with XML entities and reverts them back to their ASCII counterparts.</summary>
+        /// <param name="RawText">The <see cref="string"/> to be converted</param>
+        /// <returns><paramref name="RawText"/> is returned unchanged if no XML entities are found in the <see cref="string"/>. Otherwise, these entities are replaced with the characters they represent.</returns>
         public static string DeHtmlText(string RawText)
         {
             string ProcessedText = RawText;
@@ -121,28 +93,56 @@ namespace eq2crate
             ProcessedText = ProcessedText.Replace("&gt;", ">");
             return ProcessedText;
         }
+        /// <summary>Processes the <see cref="XElement"/> for details about <see cref="CrateItem"/> it represents and returns that CrateItem.</summary>
+        /// <param name="ItemElement">The &lt;item&gt; tag, as retrieved from Daybreak Games' Census Server (and selected children).</param>
+        /// <returns><see cref="CrateItem"/> that represents the info passed in by the parameter.</returns>
         internal CrateItem ProcessXML(XElement ItemElement)
         {
+            const string classes = "classes";
+            const string text = "text";
+            const string reqdskll = "requiredskill";
+            const string tinkering = "tinkering";
+            const string adorning = "adorning";
+            const string level = "level";
+            const string dispname = "displayname";
             XElement TypeInfoElement = ItemElement.Element("typeinfo");
             CrateItem ReturnVal;
-            if (short.TryParse(ItemElement.Attribute("typeid").Value, out short ItemType))
+            if (short.TryParse(ItemElement.Attribute("typeid").Value, out short ItemType) && 
+                short.TryParse(ItemElement.Attribute("tierid").Value, out short TierID))
             {
+                Dictionary<string, int> ClassList = new Dictionary<string, int>();
                 if (ItemType == 7)
                 {
                     List<long> RecipeList = new List<long>();
                     XElement RecipeElement = TypeInfoElement.Element("recipe_list");
                     foreach (XElement xElement in RecipeElement.Elements("recipe"))
                         RecipeList.Add(long.Parse(xElement.Attribute("id").Value));
+                    if (ItemElement.Element(reqdskll) != null)
+                    {
+                        int skillLevel = int.Parse(ItemElement.Element(reqdskll).Attribute("min_skill").Value);
+                        if (ItemElement.Element(reqdskll).Attribute(text).Value == adorning)
+                            ClassList.Add(adorning, skillLevel);
+                        else if (ItemElement.Element(reqdskll).Attribute(text).Value == tinkering)
+                            ClassList.Add(tinkering, skillLevel);
+                    }
                     ReturnVal = new RecipeBook
                     {
-                        RecipieList = RecipeList
+                        ItemTier = TierID,
+                        RecipieList = RecipeList,
+                        ClassIDs = ClassList
                     };
                 }
                 else if (ItemType == 6)
                 {
-                    ReturnVal = new SpellScroll
+                    foreach (XElement thisElement in TypeInfoElement.Element(classes).Descendants())
                     {
-                        SpellCRC = long.Parse(TypeInfoElement.Attribute("spellid").Value)
+                        ClassList.Add(thisElement.Name.ToString(), int.Parse(thisElement.Attribute(level).Value));
+                    }
+                    if (!long.TryParse(TypeInfoElement.Attribute("spellid").Value, out long spellID))
+                        throw new CrateException("Unable to extract the spell CRC from the XML.", 1);
+                    ReturnVal = new SpellScroll {
+                        SpellCRC = spellID,
+                        ItemTier = TierID
                     };
                 }
                 else
@@ -154,18 +154,17 @@ namespace eq2crate
             {
                 throw new CrateException("The item type returned was not short!", 1);
             }
-            ReturnVal.ItemName = DeHtmlText(ItemElement.Attribute("displayname").Value);
+            ReturnVal.ItemName = DeHtmlText(ItemElement.Attribute(dispname).Value);
             ReturnVal.IsHeirloom = HasHeirloom(ItemElement);
-            Dictionary<string, int> ClassDict = new Dictionary<string, int>();
-            foreach (XElement MaybeClassNode in TypeInfoElement.Element("classes").Elements())
+            if (ReturnVal.ClassIDs.Count == 0)
             {
-                ClassDict[MaybeClassNode.Attribute("displayname").Value.ToLower()] = int.Parse(MaybeClassNode.
-                    Attribute("level").Value);
-            }
-            if (ClassDict.Count == 0)
-                throw new CrateException("No classes were found for this item!", 1);
-            else
+                Dictionary<string, int> ClassDict = new Dictionary<string, int>();
+                foreach (XElement MaybeClassNode in TypeInfoElement.Element(classes).Descendants())
+                {
+                    ClassDict[MaybeClassNode.Attribute(dispname).Value.ToLower()] = int.Parse(MaybeClassNode.Attribute(level).Value);
+                }
                 ReturnVal.ClassIDs = ClassDict;
+            }
             if (long.TryParse(ItemElement.Attribute("id").Value, out long ItemIDNum))
                 ReturnVal.ItemIDNum = ItemIDNum;
             else
@@ -182,9 +181,7 @@ namespace eq2crate
             ReturnVal.IsLore = HasLore(ItemElement);
             return ReturnVal;
         }
-        /// <summary>
-        /// Returns a boolian indicating if the HEIRLOOM flag has been set on <paramref name="object_zero"/>.
-        /// </summary>
+        /// <summary>Returns a boolian indicating if the HEIRLOOM flag has been set on <paramref name="object_zero"/>.</summary>
         /// <param name="object_zero">This is the <see cref="XElement"/> of the item being tested for HEIRLOOM status.</param>
         /// <returns>TRUE if the HEIRLOOM flag is set. Otherwise FALSE.</returns>
         public static bool HasHeirloom(XElement object_zero)
@@ -196,9 +193,7 @@ namespace eq2crate
             }
             return heirloomTrue == 1;
         }
-        /// <summary>
-        /// Accepts a string and searches for an item with this name.
-        /// </summary>
+        /// <summary>Accepts a string and searches for an item with this name.</summary>
         /// <param name="search_key">This is the search key passed to the method.</param>
         /// <returns>A <see cref="CrateItem"/> with the discovered item.</returns>
         /// <exception cref="CrateException">Thrown when no items matching the search key are found.</exception>
@@ -206,9 +201,10 @@ namespace eq2crate
         public CrateItem GetItemFromName(string search_key)
         {
             CrateItem return_val;
-            string search_url = string.Concat(urlBase, urlItem, urlNameGet, search_key.ToLower());
+            string search_url = string.Concat(urlItem, urlNameGet, search_key.ToLower());
             XDocument new_xml = RunCrate.GetThisUrl(search_url);
-            int returned_num = int.Parse(new_xml.Element("item_list").Attribute("returned").Value);
+            if (!int.TryParse(new_xml.Element("item_list").Attribute("returned").Value, out int returned_num))
+                throw new CrateException("Got a problem with the returned value!!");
             switch (returned_num)
             {
                 case 0:
@@ -293,9 +289,7 @@ namespace eq2crate
             }
             return return_val;
         }
-        /// <summary>
-        /// Returns a boolian showing if the item has a description.
-        /// </summary>
+        /// <summary>Returns a boolian showing if the item has a description.</summary>
         /// <param name="object_zero">The object XElement being checked for a description.</param>
         /// <returns>TRUE if the object has a description. FALSE if not.</returns>
         public static bool HasDescription(XElement object_zero)
@@ -319,9 +313,7 @@ namespace eq2crate
             }
             return return_value;
         }
-        /// <summary>
-        /// Returns a boolian indicating whether the LORE flag is set.
-        /// </summary>
+        /// <summary>Returns a boolian indicating whether the LORE flag is set.</summary>
         /// <param name="object_zero">The XElement containing the object.</param>
         /// <returns>TRUE if the LORE flag is set. FALSE if not.</returns>
         /// <exception cref="CrateException">Thrown if the lore flag is not present in this item. This should never happen.</exception>
@@ -331,22 +323,87 @@ namespace eq2crate
                 throw new CrateException("Unable to get lore property.");
             return is_lore == 1;
         }
+        /// <summary>This queries the Daybreak Games census server for the current &quot;constants&quot; of the game.</summary>
         internal void GetConstants()
         {
-            string new_req = string.Concat(urlBase, urlConstants);
-            XDocument xml_doc = RunCrate.GetThisUrl(new_req);
+            XDocument xml_doc = RunCrate.GetThisUrl(urlConstants);
             XElement DocuNode = xml_doc.Root;
             if (short.Parse(DocuNode.Attribute("returned").Value) != 1)
                 throw new Exception("No constants returned!");
             XElement consts_node = DocuNode.Element("constants");
-            if (short.TryParse(consts_node.Attribute("maxtradeskilllevel").Value, out short new_ts_max))
-                max_ts_lvl = new_ts_max;
+            if (short.TryParse(consts_node.Attribute("maxtradeskilllevel").Value, out short new_short))
+                max_ts_lvl = new_short;
             else
                 throw new Exception("Unable to determine the max TS level.");
-            if (short.TryParse(consts_node.Attribute("maxadventurelevel").Value, out short new_adv_max))
-                max_adv_lvl = new_adv_max;
+            if (short.TryParse(consts_node.Attribute("maxadventurelevel").Value, out new_short))
+                max_adv_lvl = new_short;
             else
                 throw new Exception("Unable to determine the max Adv level.");
+            IEnumerable<XElement> adv_element = consts_node.Element("adventureclass_list").Elements("adventureclass");
+            IEnumerable<XElement> ts_element = consts_node.Element("tradeskillclass_list").Elements("tradeskillclass");
+            adv_classes.Clear();
+            rev_adv_classes.Clear();
+            ts_classes.Clear();
+            foreach (XElement thisClass in adv_element)
+            {
+                adv_classes.Add(short.Parse(thisClass.Attribute("id").Value), FirstCharToUpper(thisClass.Attribute("name").Value));
+                rev_adv_classes.Add(thisClass.Attribute("name").Value, short.Parse(thisClass.Attribute("id").Value));
+            }
+            foreach (XElement thisClass in ts_element)
+                ts_classes.Add(thisClass.Attribute("name").Value, short.Parse(thisClass.Attribute("id").Value));
+        }
+        public object Clone()
+        {
+            Crate ReturnVal = new Crate(max_adv_lvl, max_ts_lvl);            
+            foreach (CrateItem thisItem in this)
+            {
+                CrateItem tempItem;
+                if (thisItem.ItemType == 6)
+                {
+                    SpellScroll castItem = (SpellScroll)thisItem;
+                    tempItem = (SpellScroll)castItem.Clone();
+                }
+                else
+                {
+                    RecipeBook castItem = (RecipeBook)thisItem;
+                    tempItem = (RecipeBook)castItem.Clone();
+                }
+                ReturnVal.Add(tempItem);
+            }
+            if (ReturnVal.Count == Count)
+            {
+                return ReturnVal;
+            }
+            else
+                throw new Exception("Unable to ensure cloniness.");
+        }
+        /// <summary>
+        /// Returns the input string with the first letter capitalized.
+        /// </summary>
+        /// <param name="input">The string requiring capitalization.</param>
+        /// <returns>The <paramref name="input"/> with the first letter capitalized.</returns>
+        // Credit where credit is due... https://stackoverflow.com/questions/4135317/make-first-letter-of-a-string-upper-case-with-maximum-performance with minor variation.
+        private static string FirstCharToUpper(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return input;
+            else
+                return string.Concat(input.First().ToString().ToUpperInvariant(), input.Substring(1));
+        }
+        /// <summary>Looks at <see cref="CrateItem"/>s in the instance and removes the one where <see cref="CrateItem.ItemQuantity"/> == 0.</summary>
+        public void Clean()
+        {
+            List<int> RemoveList = new List<int>();
+            for (int counter = 0; counter < Count; counter++)
+            {
+                if (this[counter].ItemQuantity == 0)
+                    RemoveList.Add(counter);
+            }
+            while (RemoveList.Count > 0)
+            {
+                RemoveAt(RemoveList.Last());
+                RemoveList.RemoveAt(RemoveList.Count - 1);
+            }
         }
     }
 }
